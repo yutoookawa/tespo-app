@@ -173,12 +173,12 @@ export default function Home() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-              <div>
+             <div>
                 <label className="block font-semibold text-slate-700 mb-1">アプリ名 *</label>
                 <input
                   type="text"
                   required
-                  placeholder="例: Tespo"
+                  placeholder="例: 集中タイマー &amp; ポモドーロ"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 text-sm"
@@ -201,17 +201,18 @@ export default function Home() {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">開発者名 *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">開発者名（ニックネーム） *</label>
                   <input
                     type="text"
                     required
-                    placeholder="例: Yuto"
+                    placeholder="例: ねこまる開発"
                     value={formData.developer}
                     onChange={(e) => setFormData({ ...formData, developer: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 border-slate-300 rounded-lg text-sm"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
                   />
                 </div>
               </div>
+          
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
