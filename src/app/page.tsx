@@ -1,48 +1,27 @@
 "use client";
 
-import React, { useState } from 'react';
-import { PlusCircle, Search, ShieldCheck, Smartphone, Users, CheckCircle2, Sparkles, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { PlusCircle, Smartphone, Users, Sparkles, X, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface AppItem {
-  id: string;
+  id: string | number;
   name: string;
   category: string;
   developer: string;
-  requiredTesters: number;
-  currentTesters: number;
-  rewardPoints: number;
+  required_testers: number;
+  current_testers: number;
+  reward_points: number;
   tags: string[];
 }
 
 export default function Home() {
-  // 初期データ（モック）
-  const [apps, setApps] = useState<AppItem[]>([
-    {
-      id: "1",
-      name: "HabitMaster - 習慣化トラッカー",
-      category: "生産性",
-      developer: "DevTaro",
-      requiredTesters: 20,
-      currentTesters: 14,
-      rewardPoints: 500,
-      tags: ["Android 13+", "毎日ログイン不要", "所要3分"]
-    },
-    {
-      id: "2",
-      name: "PixelQuest - 放置系RPG",
-      category: "ゲーム",
-      developer: "StudioK",
-      requiredTesters: 20,
-      currentTesters: 19,
-      rewardPoints: 600,
-      tags: ["Android 12+", "バグ報告歓迎"]
-    }
-  ]);
-
-  // モーダルの開閉状態
+  const [apps, setApps] = useState<AppItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // フォームの入力値
+  // フォーム入力値
   const [formData, setFormData] = useState({
     name: "",
     category: "ツール",
@@ -52,32 +31,72 @@ export default function Home() {
     tagInput: "",
   });
 
-  // 投稿送信ハンドラー
-  const handleSubmit = (e: React.FormEvent) => {
+  // Supabaseから案件一覧を取得
+  const fetchApps = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('apps')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      if (data) setApps(data);
+    } catch (err) {
+      console.error('データ取得エラー:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchApps();
+  }, []);
+
+  // 投稿ハンドラー
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.developer.trim()) return;
 
-    const newApp: AppItem = {
-      id: Date.now().toString(),
-      name: formData.name,
-      category: formData.category,
-      developer: formData.developer,
-      requiredTesters: Number(formData.requiredTesters) || 20,
-      currentTesters: 0,
-      rewardPoints: Number(formData.rewardPoints) || 500,
-      tags: formData.tagInput ? formData.tagInput.split(',').map(t => t.trim()) : ["新着", "Android"]
-    };
+    setIsSubmitting(true);
 
-    setApps([newApp, ...apps]);
-    setIsModalOpen(false);
-    setFormData({
-      name: "",
-      category: "ツール",
-      developer: "",
-      requiredTesters: 20,
-      rewardPoints: 500,
-      tagInput: "",
-    });
+    const tagsArray = formData.tagInput
+      ? formData.tagInput.split(',').map(t => t.trim()).filter(Boolean)
+      : ["Android", "新着"];
+
+    try {
+      const { error } = await supabase.from('apps').insert([
+        {
+          name: formData.name,
+          category: formData.category,
+          developer: formData.developer,
+          required_testers: Number(formData.requiredTesters) || 20,
+          current_testers: 0,
+          reward_points: Number(formData.rewardPoints) || 500,
+          tags: tagsArray
+        }
+      ]);
+
+      if (error) throw error;
+
+      // 投稿完了後のリセット
+      setIsModalOpen(false);
+      setFormData({
+        name: "",
+        category: "ツール",
+        developer: "",
+        requiredTesters: 20,
+        rewardPoints: 500,
+        tagInput: "",
+      });
+
+      // 最新データを再取得
+      await fetchApps();
+    } catch (err) {
+      console.error('投稿エラー:', err);
+      alert('投稿に失敗しました。もう一度お試しください。');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -128,36 +147,56 @@ export default function Home() {
             </h2>
           </div>
 
-          <div className="grid gap-3">
-            {apps.map((app) => (
-              <div key={app.id} className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="text-[10px] font-bold tracking-wide uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                      {app.category}
-                    </span>
-                    <h3 className="font-bold text-sm text-slate-900 mt-1">{app.name}</h3>
-                    <p className="text-xs text-slate-500">開発者: {app.developer}</p>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12 text-slate-400">
+              <Loader2 className="w-6 h-6 animate-spin mr-2" />
+              <span className="text-sm">読み込み中...</span>
+            </div>
+          ) : apps.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-xl border border-dashed border-slate-300 p-6">
+              <p className="text-sm text-slate-500 font-medium">現在募集中のテスト案件はありません。</p>
+              <p className="text-xs text-slate-400 mt-1">最初の案件を募集してみましょう！</p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {apps.map((app) => (
+                <div key={app.id} className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-[10px] font-bold tracking-wide uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                        {app.category}
+                      </span>
+                      <h3 className="font-bold text-sm text-slate-900 mt-1">{app.name}</h3>
+                      <p className="text-xs text-slate-500">開発者: {app.developer}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                        +{app.reward_points} pt
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                      +{app.rewardPoints} pt
-                    </span>
-                  </div>
-                </div>
 
-                <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-100">
-                  <span>テスター進捗: <b>{app.currentTesters}</b> / {app.requiredTesters}人</span>
-                  <div className="w-24 bg-slate-100 h-2 rounded-full overflow-hidden">
-                    <div 
-                      className="bg-indigo-600 h-full rounded-full" 
-                      style={{ width: `${Math.min((app.currentTesters / app.requiredTesters) * 100, 100)}%` }}
-                    />
+                  <div className="flex flex-wrap gap-1.5">
+                    {app.tags && app.tags.map((tag, idx) => (
+                      <span key={idx} className="text-[10px] bg-slate-50 text-slate-500 px-2 py-0.5 rounded border border-slate-100">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-100">
+                    <span>テスター進捗: <b>{app.current_testers}</b> / {app.required_testers}人</span>
+                    <div className="w-24 bg-slate-100 h-2 rounded-full overflow-hidden">
+                      <div 
+                        className="bg-indigo-600 h-full rounded-full" 
+                        style={{ width: `${Math.min((app.current_testers / app.required_testers) * 100, 100)}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
       </main>
 
@@ -173,7 +212,7 @@ export default function Home() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-             <div>
+              <div>
                 <label className="block font-semibold text-slate-700 mb-1">アプリ名 *</label>
                 <input
                   type="text"
@@ -212,7 +251,6 @@ export default function Home() {
                   />
                 </div>
               </div>
-          
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -249,6 +287,7 @@ export default function Home() {
               <div className="pt-2 flex gap-2">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => setIsModalOpen(false)}
                   className="flex-1 py-2.5 rounded-lg border border-slate-200 font-semibold text-slate-600 hover:bg-slate-50"
                 >
@@ -256,9 +295,11 @@ export default function Home() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-lg bg-indigo-600 font-semibold text-white hover:bg-indigo-700 shadow"
+                  disabled={isSubmitting}
+                  className="flex-1 py-2.5 rounded-lg bg-indigo-600 font-semibold text-white hover:bg-indigo-700 shadow disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
-                  投稿する
+                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{isSubmitting ? "投稿中..." : "投稿する"}</span>
                 </button>
               </div>
             </form>
