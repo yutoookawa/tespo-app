@@ -136,7 +136,6 @@ export default function Home() {
         .single();
 
       if (error && error.code === 'PGRST116') {
-        // プロフィールがなければ初期作成
         await supabase.from('profiles').insert([{ id: userId, email: email ?? '', points: INITIAL_POINTS }]);
         setUserPoints(INITIAL_POINTS);
       } else if (data) {
@@ -163,13 +162,11 @@ export default function Home() {
       
       setAllParticipations(partData || []);
 
-      // ログイン中なら自分の参加中テストを抽出
       const { data: sessionData } = await supabase.auth.getSession();
       const currentUserId = sessionData.session?.user?.id;
       if (currentUserId && partData) {
         setMyTests(partData.filter((p) => p.user_id === currentUserId));
       } else {
-        // 未ログイン時はLocalStorage互換
         const localJoined = JSON.parse(localStorage.getItem('tespo_joined_ids') || '[]');
         setMyTests((partData || []).filter((p) => localJoined.includes(p.id)));
       }
@@ -195,7 +192,7 @@ export default function Home() {
         if (error) throw error;
         if (data.user) {
           await supabase.from('profiles').insert([{ id: data.user.id, email: data.user.email, points: INITIAL_POINTS }]);
-          alert('登録が完了しました！');
+          alert('登録確認メールを送信しました！\nメール内のリンク（Confirm your mail）をタップして認証を完了してください。');
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -266,7 +263,6 @@ export default function Home() {
 
       if (error) throw error;
 
-      // ポイント減算
       const nextPoints = userPoints - requiredPointsForPost;
       await supabase.from('profiles').update({ points: nextPoints }).eq('id', user.id);
       setUserPoints(nextPoints);
@@ -368,7 +364,7 @@ export default function Home() {
       await supabase.from('test_participations').update({ [dbColumn]: publicUrlData.publicUrl }).eq('id', participationId);
 
       setMyTests(myTests.map((t) => t.id === participationId ? { ...t, [dbColumn]: publicUrlData.publicUrl } : t));
-      alert('証明スクショを提出しました！');
+      alert('起動証明スクショを提出しました！');
     } catch (err: any) {
       alert('アップロード失敗: ' + err.message);
     } finally {
@@ -397,7 +393,6 @@ export default function Home() {
 
       if (error) throw error;
 
-      // 報酬付与
       const nextPoints = userPoints + REWARD_PER_TEST;
       await supabase.from('profiles').update({ points: nextPoints }).eq('id', user.id);
       setUserPoints(nextPoints);
@@ -416,7 +411,7 @@ export default function Home() {
   const handleCopyReviewText = (appId: number) => {
     const feedbacks = allParticipations.filter((p) => p.app_id === appId && p.status === 'completed');
     if (feedbacks.length === 0) {
-      alert('まだ完了テスターのフィードバックが集まっていません。');
+      alert('まだ完了テスターのフィードバックが集まっていません。14日経過後の報告をお待ちください。');
       return;
     }
 
@@ -434,7 +429,7 @@ export default function Home() {
     report += `\n■ テスト結果を踏まえた対応:\n上記の指摘事項を反映し、UI改善および安定性向上の修正アップデートを実施しました。`;
 
     navigator.clipboard.writeText(report);
-    alert('📋 Google Play Console 審査用のフィードバック回答テキストをコピーしました！');
+    alert('📋 Google Play Console 審査用のフィードバック回答テキストをコピーしました！そのまま貼り付けて申請に使用できます。');
   };
 
   const getDaysPassed = (startDate: string) => {
@@ -510,19 +505,20 @@ export default function Home() {
             </div>
           </div>
 
-          {/* ガイド */}
+          {/* 実装機能に合わせた最新の使い方ガイド */}
           <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm text-xs text-slate-600">
             <div className="flex items-center gap-1.5 font-bold text-slate-900 mb-1 text-sm">
               <HelpCircle className="w-4 h-4 text-indigo-600" />
-              テスポの使い方
+              テスポの使い方（クローズドテスト対策）
             </div>
             <p className="text-slate-500 text-[11px] mb-2 leading-relaxed">
-              Google Playのアプリ公開に必要な<strong>クローズドテスト（12人要件・14日間）</strong>を、個人開発者同士で助け合ってクリアする場所です。
+              Google Play公開に必要な<strong>「12人以上・14日間のクローズドテスト」</strong>を相互に支援し合うプラットフォームです。
             </p>
             <ol className="list-decimal list-inside space-y-1.5 text-slate-600 pl-0.5 leading-normal">
-              <li>気になる案件の「テストに参加」を押し、URL先の案内（Googleグループ等）からアプリをインストールします。</li>
-              <li>Google Playの審査基準を満たすため、<strong>14日間アンインストールせず端末に維持</strong>します。</li>
-              <li>14日達成でポイント（100pt）を獲得できます。貯めたポイントを使って自分のアプリもテスター募集しましょう！</li>
+              <li><strong>アカウント登録・ログイン</strong>を行い、気になる案件のテストに参加</li>
+              <li>URL先（Googleグループ等）からアプリを入れ、<strong>14日間維持</strong>（1・7・14日目に起動スクショを提出）</li>
+              <li>14日経過後に<strong>フィードバックを記入して100pt獲得</strong></li>
+              <li>貯めたポイントで<strong>自分のアプリを募集</strong>し、集まった感想を「審査用テキスト」としてワンタップコピー</li>
             </ol>
           </div>
 
@@ -705,6 +701,7 @@ export default function Home() {
             ) : apps.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-500 p-6">
                 <p className="text-sm">現在募集中のテスト案件はありません。</p>
+                <p className="text-xs text-slate-400 mt-1">ログイン後、最初の案件を募集してみましょう！</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -804,7 +801,7 @@ export default function Home() {
 
       {/* フッター */}
       <footer className="mt-12 border-t border-slate-200 py-6 text-center text-xs text-slate-400">
-        <p>© テスポ - 個人開発者のGoogle Play 20人テスト相互プラットフォーム</p>
+        <p>© テスポ - 個人開発者のGoogle Playクローズドテスト相互プラットフォーム</p>
         <div className="mt-2 flex justify-center gap-4 text-indigo-600">
           <a href="https://forms.google.com" target="_blank" rel="noopener noreferrer" className="hover:underline">
             不具合・違反案件の報告
@@ -859,7 +856,7 @@ export default function Home() {
                 disabled={authLoading}
                 className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm transition"
               >
-                {authLoading ? '処理中...' : isSignUp ? '無料で登録する' : 'ログイン'}
+                {authLoading ? '処理中...' : isSignUp ? '登録案内メールを送信' : 'ログイン'}
               </button>
             </form>
 
@@ -875,7 +872,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* フィードバック提出モーダル（Google Play申請フォーマット） */}
+      {/* フィードバック提出モーダル */}
       {isFeedbackModalOpen && activeCompletingTest && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 shadow-xl max-h-[90vh] overflow-y-auto">
