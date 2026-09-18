@@ -263,15 +263,18 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 初回訪問者向けガイド */}
-          <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm text-xs text-slate-600">
-            <div className="flex items-center gap-1.5 font-bold text-slate-800 mb-1.5 text-xs">
+      {/* 初回訪問者向けガイド */}
+          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm text-xs text-slate-600">
+            <div className="flex items-center gap-1.5 font-bold text-slate-900 mb-1 text-sm">
               <HelpCircle className="w-4 h-4 text-indigo-600" />
-              テスポの使い方（相互テストの仕組み）
+              テスポの使い方
             </div>
-            <ol className="list-decimal list-inside space-y-1 text-slate-500 pl-0.5">
-              <li>案件に参加し、Googleグループ等からアプリをインストール</li>
-              <li>Google Play審査の要件を満たすため、<strong>14日間アプリを維持</strong></li>
+            <p className="text-slate-500 text-[11px] mb-2 leading-relaxed">
+              Google Playのアプリ公開に必要な<strong>クローズドテスト（20人・14日間）</strong>を、個人開発者同士で助け合ってクリアする場所です。
+            </p>
+            <ol className="list-decimal list-inside space-y-1.5 text-slate-600 pl-0.5 leading-normal">
+              <li>案件の「テストに参加」を押し、URL先の案内からアプリをインストール</li>
+              <li>審査要件を満たすため、<strong>14日間アンインストールせず端末に維持</strong></li>
               <li>14日完了でポイント（100pt）を獲得し、自分のアプリの募集枠に活用</li>
             </ol>
           </div>
