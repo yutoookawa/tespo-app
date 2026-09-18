@@ -16,12 +16,18 @@ import {
   AlertCircle,
   Camera,
   Trash2,
-  FolderLock
+  FolderLock,
+  LogIn,
+  LogOut,
+  Copy,
+  MessageSquare
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { User } from '@supabase/supabase-js';
 
 interface AppItem {
   id: number;
+  user_id?: string;
   name: string;
   category: string;
   developer: string;
@@ -36,58 +42,113 @@ interface AppItem {
 interface Participation {
   id: number;
   app_id: number;
+  user_id?: string;
   tester_name: string;
   started_at: string;
   status: 'testing' | 'completed' | 'dropped';
-  feedback: string;
+  feedback?: string;
+  device_model?: string;
+  os_version?: string;
+  good_points?: string;
+  improvements?: string;
+  bug_reports?: string;
   screenshot_day1?: string;
   screenshot_day7?: string;
   screenshot_day14?: string;
   app?: AppItem;
 }
 
-const INITIAL_POINTS = 2200;
+const INITIAL_POINTS = 1500;
+const DEFAULT_TESTERS = 15;
 const REWARD_PER_TEST = 100;
 
 export default function Home() {
+  const [user, setUser] = useState<User | null>(null);
+  const [userPoints, setUserPoints] = useState<number>(INITIAL_POINTS);
   const [apps, setApps] = useState<AppItem[]>([]);
   const [myTests, setMyTests] = useState<Participation[]>([]);
-  const [myCreatedAppIds, setMyCreatedAppIds] = useState<number[]>([]);
-  const [userPoints, setUserPoints] = useState<number>(INITIAL_POINTS);
+  const [allParticipations, setAllParticipations] = useState<Participation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // モーダルステート
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState('');
-  const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [activeCompletingTest, setActiveCompletingTest] = useState<Participation | null>(null);
+  
+  // 認証フォームステート
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
 
-  // フォームステート
+  // 案件投稿フォームステート
   const [name, setName] = useState('');
   const [category, setCategory] = useState('ツール');
   const [developer, setDeveloper] = useState('');
-  const [requiredTesters, setRequiredTesters] = useState(22);
+  const [requiredTesters, setRequiredTesters] = useState(DEFAULT_TESTERS);
   const [tagsInput, setTagsInput] = useState('');
   const [testUrl, setTestUrl] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
 
-  // 募集人数に応じた必要ポイントの動的計算（1人につき100pt）
+  // フィードバック入力ステート
+  const [deviceModel, setDeviceModel] = useState('');
+  const [osVersion, setOsVersion] = useState('Android 14');
+  const [goodPoints, setGoodPoints] = useState('');
+  const [improvements, setImprovements] = useState('');
+  const [bugReports, setBugReports] = useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+
+  const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
   const requiredPointsForPost = requiredTesters * REWARD_PER_TEST;
 
-  // 初期データ読み込み
-  const fetchData = async () => {
-    try {
-      // ポイント復元（ローカル保存）
-      const savedPoints = localStorage.getItem('tespo_user_points');
-      if (savedPoints !== null) {
-        setUserPoints(Number(savedPoints));
+  // ユーザー状態監視 & 初期読み込み
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchUserProfile(session.user.id, session.user.email);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchUserProfile(session.user.id, session.user.email);
       } else {
-        localStorage.setItem('tespo_user_points', String(INITIAL_POINTS));
         setUserPoints(INITIAL_POINTS);
       }
+    });
 
-      // 自分が作成した案件ID
-      const localCreated = JSON.parse(localStorage.getItem('tespo_my_created_apps') || '[]');
-      setMyCreatedAppIds(localCreated);
+    fetchData();
 
-      // 全案件取得
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchUserProfile = async (userId: string, email?: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('points')
+        .eq('id', userId)
+        .single();
+
+      if (error && error.code === 'PGRST116') {
+        // プロフィールがなければ初期作成
+        await supabase.from('profiles').insert([{ id: userId, email: email ?? '', points: INITIAL_POINTS }]);
+        setUserPoints(INITIAL_POINTS);
+      } else if (data) {
+        setUserPoints(data.points);
+      }
+    } catch (err) {
+      console.error('プロファイル取得エラー:', err);
+    }
+  };
+
+  const fetchData = async () => {
+    try {
       const { data: appsData, error: appsErr } = await supabase
         .from('apps')
         .select('*')
@@ -95,16 +156,22 @@ export default function Home() {
       if (appsErr) throw appsErr;
       setApps(appsData || []);
 
-      // 参加中テスト取得
-      const localJoined = JSON.parse(localStorage.getItem('tespo_joined_ids') || '[]');
-      if (localJoined.length > 0) {
-        const { data: partData, error: partErr } = await supabase
-          .from('test_participations')
-          .select('*, app:apps(*)')
-          .in('id', localJoined);
-        if (!partErr && partData) {
-          setMyTests(partData);
-        }
+      const { data: partData, error: partErr } = await supabase
+        .from('test_participations')
+        .select('*, app:apps(*)');
+      if (partErr) throw partErr;
+      
+      setAllParticipations(partData || []);
+
+      // ログイン中なら自分の参加中テストを抽出
+      const { data: sessionData } = await supabase.auth.getSession();
+      const currentUserId = sessionData.session?.user?.id;
+      if (currentUserId && partData) {
+        setMyTests(partData.filter((p) => p.user_id === currentUserId));
+      } else {
+        // 未ログイン時はLocalStorage互換
+        const localJoined = JSON.parse(localStorage.getItem('tespo_joined_ids') || '[]');
+        setMyTests((partData || []).filter((p) => localJoined.includes(p.id)));
       }
     } catch (err) {
       console.error('データ取得エラー:', err);
@@ -113,17 +180,57 @@ export default function Home() {
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  // 認証ハンドラー
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError('');
 
-  // 新規案件投稿（人数に応じたポイント消費 & URL検証）
+    try {
+      if (isSignUp) {
+        const { data, error } = await supabase.auth.signUp({
+          email: authEmail,
+          password: authPassword,
+        });
+        if (error) throw error;
+        if (data.user) {
+          await supabase.from('profiles').insert([{ id: data.user.id, email: data.user.email, points: INITIAL_POINTS }]);
+          alert('登録が完了しました！');
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: authPassword,
+        });
+        if (error) throw error;
+      }
+      setIsAuthModalOpen(false);
+      fetchData();
+    } catch (err: any) {
+      setAuthError(err.message || '認証エラーが発生しました');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setMyTests([]);
+  };
+
+  // 案件新規作成
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
 
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     if (userPoints < requiredPointsForPost) {
-      setFormError(`この人数（${requiredTesters}人）での募集には ${requiredPointsForPost} pt 必要です。他の方のテストに参加してポイントを貯めてください。`);
+      setFormError(`この人数（${requiredTesters}人）での募集には ${requiredPointsForPost} pt 必要です。`);
       return;
     }
 
@@ -131,22 +238,20 @@ export default function Home() {
       const isGoogleUrl = testUrl.startsWith('https://') && 
         (testUrl.includes('google.com') || testUrl.includes('play.google.com'));
       if (!isGoogleUrl) {
-        setFormError('テスト参加URLには、GoogleグループまたはPlayストアのURL（https://...）を入力してください。');
+        setFormError('テスト参加URLには GoogleグループまたはPlayストアのURLを入力してください。');
         return;
       }
     }
 
     setIsSubmitting(true);
-
-    const tags = tagsInput
-      ? tagsInput.split(',').map((t) => t.trim()).filter(Boolean)
-      : ['クローズドテスト', '14日間維持'];
+    const tags = tagsInput ? tagsInput.split(',').map((t) => t.trim()).filter(Boolean) : ['クローズドテスト', '14日間維持'];
 
     try {
       const { data, error } = await supabase
         .from('apps')
         .insert([
           {
+            user_id: user.id,
             name,
             category,
             developer: developer || '匿名開発者',
@@ -161,67 +266,63 @@ export default function Home() {
 
       if (error) throw error;
 
-      // ポイント消費
+      // ポイント減算
       const nextPoints = userPoints - requiredPointsForPost;
+      await supabase.from('profiles').update({ points: nextPoints }).eq('id', user.id);
       setUserPoints(nextPoints);
-      localStorage.setItem('tespo_user_points', String(nextPoints));
 
       if (data && data.length > 0) {
         setApps([data[0], ...apps]);
-        const updatedCreated = [...myCreatedAppIds, data[0].id];
-        setMyCreatedAppIds(updatedCreated);
-        localStorage.setItem('tespo_my_created_apps', JSON.stringify(updatedCreated));
       }
 
       setName('');
       setCategory('ツール');
       setDeveloper('');
-      setRequiredTesters(22);
+      setRequiredTesters(DEFAULT_TESTERS);
       setTagsInput('');
       setTestUrl('');
       setIsModalOpen(false);
     } catch (err: any) {
-      console.error('投稿エラー:', err);
-      setFormError('投稿に失敗しました: ' + (err.message || '通信エラー'));
+      setFormError('投稿に失敗しました: ' + err.message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // 自分の募集案件の削除（未完了分のポイント払い戻し）
+  // 自分の案件削除
   const handleDeleteMyApp = async (app: AppItem) => {
-    if (!confirm(`「${app.name}」の募集を取り下げますか？\n残りの枠に応じたポイントが返還されます。`)) {
-      return;
-    }
+    if (!confirm(`「${app.name}」の募集を取り下げますか？\n未募集枠分のポイントが返還されます。`)) return;
 
     try {
       const { error } = await supabase.from('apps').delete().eq('id', app.id);
       if (error) throw error;
 
-      // 未参加分のポイントを返還
       const remainingSlots = Math.max(0, app.required_testers - app.current_testers);
       const refundPoints = remainingSlots * REWARD_PER_TEST;
       const nextPoints = userPoints + refundPoints;
-      setUserPoints(nextPoints);
-      localStorage.setItem('tespo_user_points', String(nextPoints));
 
+      if (user) {
+        await supabase.from('profiles').update({ points: nextPoints }).eq('id', user.id);
+      }
+      setUserPoints(nextPoints);
       setApps(apps.filter((a) => a.id !== app.id));
-      const updatedCreated = myCreatedAppIds.filter((id) => id !== app.id);
-      setMyCreatedAppIds(updatedCreated);
-      localStorage.setItem('tespo_my_created_apps', JSON.stringify(updatedCreated));
 
       alert(`案件を削除しました。未募集分として ${refundPoints} pt 返還されました。`);
     } catch (err) {
-      console.error('削除エラー:', err);
-      alert('案件の削除に失敗しました。');
+      alert('削除に失敗しました。');
     }
   };
 
-  // テスト参加処理
+  // テスト参加
   const handleJoinTest = async (app: AppItem) => {
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     const isAlreadyJoined = myTests.some((t) => t.app_id === app.id);
     if (isAlreadyJoined) {
-      alert('このアプリのテストには既に参加中です！14日間の維持を継続してください。');
+      alert('このアプリのテストには既に参加中です！');
       return;
     }
 
@@ -230,110 +331,110 @@ export default function Home() {
     try {
       const { data: partData, error: partErr } = await supabase
         .from('test_participations')
-        .insert([{ app_id: app.id, status: 'testing' }])
+        .insert([{ app_id: app.id, user_id: user.id, status: 'testing' }])
         .select('*, app:apps(*)')
         .single();
 
       if (partErr) throw partErr;
 
-      const currentLocal = JSON.parse(localStorage.getItem('tespo_joined_ids') || '[]');
-      localStorage.setItem('tespo_joined_ids', JSON.stringify([...currentLocal, partData.id]));
       setMyTests([partData, ...myTests]);
-
-      await supabase
-        .from('apps')
-        .update({ current_testers: updatedCount })
-        .eq('id', app.id);
-
+      await supabase.from('apps').update({ current_testers: updatedCount }).eq('id', app.id);
       setApps(apps.map((a) => (a.id === app.id ? { ...a, current_testers: updatedCount } : a)));
 
       if (app.test_url) {
         window.open(app.test_url, '_blank', 'noopener,noreferrer');
       }
     } catch (err) {
-      console.error('参加エラー:', err);
       alert('参加処理でエラーが発生しました');
     }
   };
 
-  // スクリーンショットのアップロード処理
-  const handleScreenshotUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>, 
-    participationId: number, 
-    dayKey: 'day1' | 'day7' | 'day14'
-  ) => {
+  // スクショアップロード
+  const handleScreenshotUpload = async (e: React.ChangeEvent<HTMLInputElement>, participationId: number, dayKey: 'day1' | 'day7' | 'day14') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const uploadKey = `${participationId}_${dayKey}`;
-    setUploadingTarget(uploadKey);
-
+    setUploadingTarget(`${participationId}_${dayKey}`);
     try {
       const fileExt = file.name.split('.').pop();
       const filePath = `proofs/${participationId}_${dayKey}_${Date.now()}.${fileExt}`;
 
-      // Supabase Storage にアップロード
-      const { error: uploadError } = await supabase.storage
-        .from('task-proofs')
-        .upload(filePath, file);
-
+      const { error: uploadError } = await supabase.storage.from('task-proofs').upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      // 公開URLを取得
-      const { data: publicUrlData } = supabase.storage
-        .from('task-proofs')
-        .getPublicUrl(filePath);
-
+      const { data: publicUrlData } = supabase.storage.from('task-proofs').getPublicUrl(filePath);
       const dbColumn = `screenshot_${dayKey}`;
 
-      // DBを更新
-      const { error: updateError } = await supabase
-        .from('test_participations')
-        .update({ [dbColumn]: publicUrlData.publicUrl })
-        .eq('id', participationId);
+      await supabase.from('test_participations').update({ [dbColumn]: publicUrlData.publicUrl }).eq('id', participationId);
 
-      if (updateError) throw updateError;
-
-      // ステート更新
-      setMyTests(myTests.map((t) => {
-        if (t.id === participationId) {
-          return { ...t, [dbColumn]: publicUrlData.publicUrl };
-        }
-        return t;
-      }));
-
-      alert(`${dayKey === 'day1' ? '1日目' : dayKey === 'day7' ? '7日目' : '14日目'} のスクショを提出しました！`);
+      setMyTests(myTests.map((t) => t.id === participationId ? { ...t, [dbColumn]: publicUrlData.publicUrl } : t));
+      alert('証明スクショを提出しました！');
     } catch (err: any) {
-      console.error('アップロードエラー:', err);
-      alert('画像のアップロードに失敗しました: ' + (err.message || '通信エラー'));
+      alert('アップロード失敗: ' + err.message);
     } finally {
       setUploadingTarget(null);
     }
   };
 
-  // 14日完遂によるポイント獲得処理
-  const handleCompleteTest = async (testItem: Participation) => {
-    if (testItem.status === 'completed') return;
+  // フィードバック提出 & 完了ポイント受取
+  const handleFeedbackSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeCompletingTest || !user) return;
 
+    setFeedbackSubmitting(true);
     try {
       const { error } = await supabase
         .from('test_participations')
-        .update({ status: 'completed' })
-        .eq('id', testItem.id);
+        .update({
+          status: 'completed',
+          device_model: deviceModel,
+          os_version: osVersion,
+          good_points: goodPoints,
+          improvements: improvements,
+          bug_reports: bugReports,
+        })
+        .eq('id', activeCompletingTest.id);
 
       if (error) throw error;
 
-      // ポイント加算（+100pt）
+      // 報酬付与
       const nextPoints = userPoints + REWARD_PER_TEST;
+      await supabase.from('profiles').update({ points: nextPoints }).eq('id', user.id);
       setUserPoints(nextPoints);
-      localStorage.setItem('tespo_user_points', String(nextPoints));
 
-      setMyTests(myTests.map((t) => t.id === testItem.id ? { ...t, status: 'completed' } : t));
+      setMyTests(myTests.map((t) => t.id === activeCompletingTest.id ? { ...t, status: 'completed' } : t));
+      setIsFeedbackModalOpen(false);
       alert(`🎉 14日間のテスト完遂お疲れさまでした！\n報酬として ${REWARD_PER_TEST} pt を獲得しました！`);
-    } catch (err) {
-      console.error('完了処理エラー:', err);
-      alert('完了処理に失敗しました。');
+    } catch (err: any) {
+      alert('提出エラー: ' + err.message);
+    } finally {
+      setFeedbackSubmitting(false);
     }
+  };
+
+  // Google Play 審査用テキストのクリップボードコピー
+  const handleCopyReviewText = (appId: number) => {
+    const feedbacks = allParticipations.filter((p) => p.app_id === appId && p.status === 'completed');
+    if (feedbacks.length === 0) {
+      alert('まだ完了テスターのフィードバックが集まっていません。');
+      return;
+    }
+
+    let report = `【Google Play クローズドテスト 審査申請用フィードバック実績】\n\n`;
+    report += `■ 参加テスター数: ${feedbacks.length}名（14日間オプトイン維持確認済）\n\n`;
+    report += `■ テスターからの具体的なフィードバック内容:\n`;
+
+    feedbacks.forEach((f, idx) => {
+      report += `\n[テスター ${idx + 1}] 使用端末: ${f.device_model || 'Android'} / OS: ${f.os_version || 'Android 14'}\n`;
+      report += `・評価点: ${f.good_points || '特になし'}\n`;
+      report += `・改善要望: ${f.improvements || '特になし'}\n`;
+      report += `・不具合報告: ${f.bug_reports || '発生なし'}\n`;
+    });
+
+    report += `\n■ テスト結果を踏まえた対応:\n上記の指摘事項を反映し、UI改善および安定性向上の修正アップデートを実施しました。`;
+
+    navigator.clipboard.writeText(report);
+    alert('📋 Google Play Console 審査用のフィードバック回答テキストをコピーしました！');
   };
 
   const getDaysPassed = (startDate: string) => {
@@ -341,7 +442,7 @@ export default function Home() {
     return Math.floor(diff / (1000 * 60 * 60 * 24));
   };
 
-  const myCreatedApps = apps.filter((a) => myCreatedAppIds.includes(a.id));
+  const myCreatedApps = user ? apps.filter((a) => a.user_id === user.id) : [];
 
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col justify-between">
@@ -355,16 +456,39 @@ export default function Home() {
                 テスポ
               </h1>
             </div>
-            <button
-              onClick={() => {
-                setFormError('');
-                setIsModalOpen(true);
-              }}
-              className="flex items-center space-x-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-3 py-1.5 rounded-full transition shadow-sm"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>案件を募集</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {user ? (
+                <button
+                  onClick={handleSignOut}
+                  className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 border border-slate-200 px-2.5 py-1.5 rounded-full"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>ログアウト</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="text-xs text-indigo-600 hover:bg-indigo-50 flex items-center gap-1 border border-indigo-200 px-2.5 py-1.5 rounded-full font-semibold"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>ログイン</span>
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setFormError('');
+                  if (!user) {
+                    setIsAuthModalOpen(true);
+                  } else {
+                    setIsModalOpen(true);
+                  }
+                }}
+                className="flex items-center space-x-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-3 py-1.5 rounded-full transition shadow-sm"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>募集</span>
+              </button>
+            </div>
           </div>
         </header>
 
@@ -386,14 +510,14 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 初回訪問者向けガイド */}
+          {/* ガイド */}
           <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm text-xs text-slate-600">
             <div className="flex items-center gap-1.5 font-bold text-slate-900 mb-1 text-sm">
               <HelpCircle className="w-4 h-4 text-indigo-600" />
               テスポの使い方
             </div>
             <p className="text-slate-500 text-[11px] mb-2 leading-relaxed">
-              Google Playのアプリ公開に必要な<strong>クローズドテスト（20人・14日間）</strong>を、個人開発者同士で助け合ってクリアする場所です。
+              Google Playのアプリ公開に必要な<strong>クローズドテスト（12人要件・14日間）</strong>を、個人開発者同士で助け合ってクリアする場所です。
             </p>
             <ol className="list-decimal list-inside space-y-1.5 text-slate-600 pl-0.5 leading-normal">
               <li>気になる案件の「テストに参加」を押し、URL先の案内（Googleグループ等）からアプリをインストールします。</li>
@@ -402,7 +526,7 @@ export default function Home() {
             </ol>
           </div>
 
-          {/* 自分の募集案件（管理・削除） */}
+          {/* 自分の募集案件（管理・審査用出力） */}
           {myCreatedApps.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -415,19 +539,29 @@ export default function Home() {
 
               <div className="space-y-2">
                 {myCreatedApps.map((app) => (
-                  <div key={app.id} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-sm">{app.name}</h4>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        テスター確保: <span className="font-semibold text-indigo-600">{app.current_testers}</span> / {app.required_testers} 人
-                      </p>
+                  <div key={app.id} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-sm">{app.name}</h4>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          テスター確保: <span className="font-semibold text-indigo-600">{app.current_testers}</span> / {app.required_testers} 人
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteMyApp(app)}
+                        className="text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition"
+                        title="案件を取り下げて削除"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
+
                     <button
-                      onClick={() => handleDeleteMyApp(app)}
-                      className="text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition"
-                      title="案件を取り下げて削除"
+                      onClick={() => handleCopyReviewText(app.id)}
+                      className="w-full py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>審査申請用フィードバックをコピー</span>
                     </button>
                   </div>
                 ))}
@@ -435,7 +569,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* 参加中テスト（タスク・スクショ提出） */}
+          {/* 参加中テスト（タスク・スクショ・フィードバック） */}
           {myTests.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -473,14 +607,13 @@ export default function Home() {
                         />
                       </div>
 
-                      {/* スクショ提出エリア */}
+                      {/* スクショ提出 */}
                       <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                         <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1 mb-2">
                           <Camera className="w-3.5 h-3.5 text-indigo-600" />
                           起動証明スクショ提出
                         </p>
                         <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
-                          {/* 1日目 */}
                           <label className="border border-dashed border-slate-300 rounded p-1.5 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
                             <span className="font-medium text-slate-600">1日目（開始）</span>
                             {t.screenshot_day1 ? (
@@ -488,17 +621,11 @@ export default function Home() {
                             ) : uploadingTarget === `${t.id}_day1` ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600 mt-1" />
                             ) : (
-                              <span className="text-indigo-600 mt-1">アップロード</span>
+                              <span className="text-indigo-600 mt-1">アップ</span>
                             )}
-                            <input 
-                              type="file" 
-                              accept="image/*" 
-                              className="hidden" 
-                              onChange={(e) => handleScreenshotUpload(e, t.id, 'day1')}
-                            />
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleScreenshotUpload(e, t.id, 'day1')} />
                           </label>
 
-                          {/* 7日目 */}
                           <label className="border border-dashed border-slate-300 rounded p-1.5 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
                             <span className="font-medium text-slate-600">7日目（中間）</span>
                             {t.screenshot_day7 ? (
@@ -506,17 +633,11 @@ export default function Home() {
                             ) : uploadingTarget === `${t.id}_day7` ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600 mt-1" />
                             ) : (
-                              <span className="text-indigo-600 mt-1">アップロード</span>
+                              <span className="text-indigo-600 mt-1">アップ</span>
                             )}
-                            <input 
-                              type="file" 
-                              accept="image/*" 
-                              className="hidden" 
-                              onChange={(e) => handleScreenshotUpload(e, t.id, 'day7')}
-                            />
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleScreenshotUpload(e, t.id, 'day7')} />
                           </label>
 
-                          {/* 14日目 */}
                           <label className="border border-dashed border-slate-300 rounded p-1.5 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
                             <span className="font-medium text-slate-600">14日目（完遂）</span>
                             {t.screenshot_day14 ? (
@@ -524,14 +645,9 @@ export default function Home() {
                             ) : uploadingTarget === `${t.id}_day14` ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600 mt-1" />
                             ) : (
-                              <span className="text-indigo-600 mt-1">アップロード</span>
+                              <span className="text-indigo-600 mt-1">アップ</span>
                             )}
-                            <input 
-                              type="file" 
-                              accept="image/*" 
-                              className="hidden" 
-                              onChange={(e) => handleScreenshotUpload(e, t.id, 'day14')}
-                            />
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleScreenshotUpload(e, t.id, 'day14')} />
                           </label>
                         </div>
                       </div>
@@ -540,9 +656,9 @@ export default function Home() {
                       <div className="flex justify-between items-center pt-1">
                         <span className="text-slate-500 text-[11px]">
                           {isCompleted 
-                            ? '獲得完了' 
+                            ? '完了・獲得済' 
                             : isReadyToComplete 
-                              ? '14日達成！完了申請可能' 
+                              ? '14日達成！フィードバック提出可能' 
                               : `あと ${14 - days} 日間保持`}
                         </span>
                         {isCompleted ? (
@@ -552,11 +668,14 @@ export default function Home() {
                           </span>
                         ) : isReadyToComplete ? (
                           <button
-                            onClick={() => handleCompleteTest(t)}
+                            onClick={() => {
+                              setActiveCompletingTest(t);
+                              setIsFeedbackModalOpen(true);
+                            }}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition active:scale-95"
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            完了して100pt受取
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            フィードバックを書いて100pt受取
                           </button>
                         ) : (
                           <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-medium">
@@ -574,7 +693,7 @@ export default function Home() {
           {/* 募集中の案件一覧 */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-bold text-slate-800 text-sm">募集中のテスト案件（20人審査対策）</h2>
+              <h2 className="font-bold text-slate-800 text-sm">募集中のテスト案件（12人要件対策）</h2>
               <span className="text-xs text-slate-500 font-medium">{apps.length} 件</span>
             </div>
 
@@ -586,7 +705,6 @@ export default function Home() {
             ) : apps.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-500 p-6">
                 <p className="text-sm">現在募集中のテスト案件はありません。</p>
-                <p className="text-xs text-slate-400 mt-1">初期ポイントを使って最初の案件を募集してみましょう！</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -596,7 +714,7 @@ export default function Home() {
                     Math.round((app.current_testers / app.required_testers) * 100)
                   );
                   const isJoined = myTests.some((t) => t.app_id === app.id);
-                  const isMyCreated = myCreatedAppIds.includes(app.id);
+                  const isMyCreated = user && app.user_id === user.id;
 
                   return (
                     <div
@@ -645,12 +763,12 @@ export default function Home() {
                               style={{ width: `${progress}%` }}
                             />
                           </div>
-                          <p className="text-[10px] text-slate-400">※ Google Play要件: 20人の同時維持（バッファ推奨）</p>
+                          <p className="text-[10px] text-slate-400">※ Google Play要件: 12人以上の14日維持（推奨15人）</p>
                         </div>
 
                         <button
                           onClick={() => handleJoinTest(app)}
-                          disabled={isJoined || isMyCreated}
+                          disabled={Boolean(isJoined || isMyCreated)}
                           className={`w-full py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
                             isMyCreated
                               ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
@@ -688,21 +806,169 @@ export default function Home() {
       <footer className="mt-12 border-t border-slate-200 py-6 text-center text-xs text-slate-400">
         <p>© テスポ - 個人開発者のGoogle Play 20人テスト相互プラットフォーム</p>
         <div className="mt-2 flex justify-center gap-4 text-indigo-600">
-          <a
-            href="https://forms.google.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:underline"
-          >
+          <a href="https://forms.google.com" target="_blank" rel="noopener noreferrer" className="hover:underline">
             不具合・違反案件の報告
           </a>
         </div>
       </footer>
 
-      {/* 投稿モーダル */}
+      {/* ログイン・新規登録モーダル */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-xl animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-slate-900 text-base">{isSignUp ? 'テスポに新規登録' : 'ログイン'}</h3>
+              <button onClick={() => setIsAuthModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {authError && (
+              <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
+                {authError}
+              </div>
+            )}
+
+            <form onSubmit={handleAuth} className="space-y-3 text-sm">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">メールアドレス</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="developer@example.com"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">パスワード</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="6文字以上のパスワード"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm transition"
+              >
+                {authLoading ? '処理中...' : isSignUp ? '無料で登録する' : 'ログイン'}
+              </button>
+            </form>
+
+            <div className="mt-3 text-center">
+              <button
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="text-xs text-indigo-600 hover:underline"
+              >
+                {isSignUp ? 'アカウントをお持ちの方はこちら（ログイン）' : '初めての方はこちら（新規登録）'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* フィードバック提出モーダル（Google Play申請フォーマット） */}
+      {isFeedbackModalOpen && activeCompletingTest && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">テスト完了フィードバック提出</h3>
+                <p className="text-[11px] text-slate-500">Google Play審査提出用のフィードバックを記入してください</p>
+              </div>
+              <button onClick={() => setIsFeedbackModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleFeedbackSubmit} className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">使用端末名 <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="例: Pixel 8, Galaxy S23"
+                    value={deviceModel}
+                    onChange={(e) => setDeviceModel(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">OSバージョン</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Android 14"
+                    value={osVersion}
+                    onChange={(e) => setOsVersion(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">良かった点・UIの感想 <span className="text-red-500">*</span></label>
+                <textarea
+                  required
+                  rows={2}
+                  placeholder="操作感やデザインについて感じたこと"
+                  value={goodPoints}
+                  onChange={(e) => setGoodPoints(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">改善してほしい点 <span className="text-red-500">*</span></label>
+                <textarea
+                  required
+                  rows={2}
+                  placeholder="分かりにくかった部分やもっとこうしてほしい点"
+                  value={improvements}
+                  onChange={(e) => setImprovements(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">不具合・クラッシュ報告（なければ「なし」） <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  required
+                  placeholder="なし、または発生した画面の状況"
+                  value={bugReports}
+                  onChange={(e) => setBugReports(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={feedbackSubmitting}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm transition shadow flex items-center justify-center gap-1.5"
+                >
+                  {feedbackSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>提出して 100 pt を獲得</span>}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 案件募集モーダル */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 shadow-xl animate-in fade-in slide-in-from-bottom duration-200 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-3">
               <div>
                 <h3 className="font-bold text-slate-900 text-base">テスト案件を募集する</h3>
@@ -724,16 +990,14 @@ export default function Home() {
 
             <form onSubmit={handleSubmit} className="space-y-3 text-sm">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  アプリ名 <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">アプリ名 <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   required
                   placeholder="例: 習慣トラッカー"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                 />
               </div>
 
@@ -780,7 +1044,7 @@ export default function Home() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">募集人数（1人あたり100pt）</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">募集人数（推奨15人）</label>
                   <input
                     type="number"
                     min="1"
@@ -802,9 +1066,7 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  タグ（カンマ区切り）
-                </label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">タグ（カンマ区切り）</label>
                 <input
                   type="text"
                   placeholder="例: Android14, 日常系"
@@ -820,11 +1082,7 @@ export default function Home() {
                   disabled={isSubmitting || userPoints < requiredPointsForPost}
                   className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm transition shadow flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
-                  {isSubmitting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <span>{requiredPointsForPost} pt で募集する</span>
-                  )}
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>{requiredPointsForPost} pt で募集する</span>}
                 </button>
               </div>
             </form>
