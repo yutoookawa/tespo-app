@@ -273,9 +273,9 @@ export default function Home() {
               Google Playのアプリ公開に必要な<strong>クローズドテスト（20人・14日間）</strong>を、個人開発者同士で助け合ってクリアする場所です。
             </p>
             <ol className="list-decimal list-inside space-y-1.5 text-slate-600 pl-0.5 leading-normal">
-              <li>案件の「テストに参加」を押し、URL先の案内からアプリをインストール</li>
-              <li>審査要件を満たすため、<strong>14日間アンインストールせず端末に維持</strong></li>
-              <li>14日完了でポイント（100pt）を獲得し、自分のアプリの募集枠に活用</li>
+              <li>気になる案件の「テストに参加」を押し、URL先の案内（Googleグループ等）からアプリをインストールします。</li>
+              <li>Google Playの審査基準を満たすため、<strong>14日間アンインストールせず端末に維持</strong>します。</li>
+              <li>14日達成でポイント（100pt）を獲得できます。貯めたポイントを使って自分のアプリもテスター募集しましょう！</li>
             </ol>
           </div>
 
