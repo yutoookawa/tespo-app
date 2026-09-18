@@ -64,6 +64,7 @@ const REWARD_PER_TEST = 100;
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
+  const [username, setUsername] = useState<string>('');
   const [userPoints, setUserPoints] = useState<number>(INITIAL_POINTS);
   const [apps, setApps] = useState<AppItem[]>([]);
   const [myTests, setMyTests] = useState<Participation[]>([]);
@@ -79,6 +80,7 @@ export default function Home() {
   // 認証フォームステート
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [authUsername, setAuthUsername] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
@@ -86,7 +88,6 @@ export default function Home() {
   // 案件投稿フォームステート
   const [name, setName] = useState('');
   const [category, setCategory] = useState('ツール');
-  const [developer, setDeveloper] = useState('');
   const [requiredTesters, setRequiredTesters] = useState(DEFAULT_TESTERS);
   const [tagsInput, setTagsInput] = useState('');
   const [testUrl, setTestUrl] = useState('');
@@ -118,6 +119,7 @@ export default function Home() {
       if (session?.user) {
         fetchUserProfile(session.user.id, session.user.email);
       } else {
+        setUsername('');
         setUserPoints(INITIAL_POINTS);
       }
     });
@@ -131,14 +133,17 @@ export default function Home() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('points')
+        .select('points, username')
         .eq('id', userId)
         .single();
 
       if (error && error.code === 'PGRST116') {
-        await supabase.from('profiles').insert([{ id: userId, email: email ?? '', points: INITIAL_POINTS }]);
+        const fallbackName = email ? email.split('@')[0] : '開発者';
+        await supabase.from('profiles').insert([{ id: userId, email: email ?? '', username: fallbackName, points: INITIAL_POINTS }]);
+        setUsername(fallbackName);
         setUserPoints(INITIAL_POINTS);
       } else if (data) {
+        setUsername(data.username || '名無し開発者');
         setUserPoints(data.points);
       }
     } catch (err) {
@@ -185,13 +190,33 @@ export default function Home() {
 
     try {
       if (isSignUp) {
+        if (!authUsername.trim()) {
+          throw new Error('開発者名（ユーザー名）を入力してください');
+        }
+
+        // 開発者名の重複チェック
+        const { data: existingUser } = await supabase
+          .from('profiles')
+          .select('id')
+          .ilike('username', authUsername.trim())
+          .maybeSingle();
+
+        if (existingUser) {
+          throw new Error('この開発者名はすでに使用されています。別の名前を入力してください。');
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email: authEmail,
           password: authPassword,
         });
         if (error) throw error;
         if (data.user) {
-          await supabase.from('profiles').insert([{ id: data.user.id, email: data.user.email, points: INITIAL_POINTS }]);
+          await supabase.from('profiles').insert([{ 
+            id: data.user.id, 
+            email: data.user.email, 
+            username: authUsername.trim(),
+            points: INITIAL_POINTS 
+          }]);
           alert('登録確認メールを送信しました！\nメール内のリンク（Confirm your mail）をタップして認証を完了してください。');
         }
       } else {
@@ -213,6 +238,7 @@ export default function Home() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setUsername('');
     setMyTests([]);
   };
 
@@ -251,7 +277,7 @@ export default function Home() {
             user_id: user.id,
             name,
             category,
-            developer: developer || '匿名開発者',
+            developer: username || '開発者',
             required_testers: Number(requiredTesters),
             current_testers: 0,
             reward_points: REWARD_PER_TEST,
@@ -273,7 +299,6 @@ export default function Home() {
 
       setName('');
       setCategory('ツール');
-      setDeveloper('');
       setRequiredTesters(DEFAULT_TESTERS);
       setTagsInput('');
       setTestUrl('');
@@ -453,13 +478,18 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-2">
               {user ? (
-                <button
-                  onClick={handleSignOut}
-                  className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 border border-slate-200 px-2.5 py-1.5 rounded-full"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>ログアウト</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
+                    {username}
+                  </span>
+                  <button
+                    onClick={handleSignOut}
+                    className="text-xs text-slate-500 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100 transition"
+                    title="ログアウト"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
               ) : (
                 <button
                   onClick={() => setIsAuthModalOpen(true)}
@@ -505,11 +535,11 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 実装機能に合わせた最新の使い方ガイド */}
+          {/* 使い方ガイド */}
           <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm text-xs text-slate-600">
             <div className="flex items-center gap-1.5 font-bold text-slate-900 mb-1 text-sm">
               <HelpCircle className="w-4 h-4 text-indigo-600" />
-              テスポの使い方（クローズドテスト対策）
+              テスポの使い方
             </div>
             <p className="text-slate-500 text-[11px] mb-2 leading-relaxed">
               Google Play公開に必要な<strong>「12人以上・14日間のクローズドテスト」</strong>を相互に支援し合うプラットフォームです。
@@ -686,10 +716,10 @@ export default function Home() {
             </div>
           )}
 
-          {/* 募集中の案件一覧 */}
+          {/* 募集中の案件一覧（シンプル見出しに変更） */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-bold text-slate-800 text-sm">募集中のテスト案件（12人要件対策）</h2>
+              <h2 className="font-bold text-slate-800 text-sm">募集中のテスト案件</h2>
               <span className="text-xs text-slate-500 font-medium">{apps.length} 件</span>
             </div>
 
@@ -725,7 +755,7 @@ export default function Home() {
                               {app.category}
                             </span>
                             <h3 className="font-bold text-slate-900 text-base">{app.name}</h3>
-                            <p className="text-xs text-slate-500 mt-0.5">{app.developer}</p>
+                            <p className="text-xs text-slate-500 mt-0.5 font-medium">{app.developer}</p>
                           </div>
                           <div className="text-right">
                             <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-100">
@@ -827,6 +857,22 @@ export default function Home() {
             )}
 
             <form onSubmit={handleAuth} className="space-y-3 text-sm">
+              {isSignUp && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    開発者名（ユーザー名） <span className="text-red-500">*重複不可</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="例: StudioAlfa, ヤマダ開発"
+                    value={authUsername}
+                    onChange={(e) => setAuthUsername(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">メールアドレス</label>
                 <input
@@ -854,7 +900,7 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm transition"
+                className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm transition shadow"
               >
                 {authLoading ? '処理中...' : isSignUp ? '登録案内メールを送信' : 'ログイン'}
               </button>
@@ -862,7 +908,10 @@ export default function Home() {
 
             <div className="mt-3 text-center">
               <button
-                onClick={() => setIsSignUp(!isSignUp)}
+                onClick={() => {
+                  setIsSignUp(!isSignUp);
+                  setAuthError('');
+                }}
                 className="text-xs text-indigo-600 hover:underline"
               >
                 {isSignUp ? 'アカウントをお持ちの方はこちら（ログイン）' : '初めての方はこちら（新規登録）'}
@@ -1017,10 +1066,9 @@ export default function Home() {
                   <label className="block text-xs font-semibold text-slate-700 mb-1">開発者名</label>
                   <input
                     type="text"
-                    placeholder="Studio Alfa"
-                    value={developer}
-                    onChange={(e) => setDeveloper(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    disabled
+                    value={username || 'ログイン中の開発者名'}
+                    className="w-full px-3 py-2 border border-slate-200 bg-slate-100 text-slate-600 rounded-lg text-sm cursor-not-allowed font-medium"
                   />
                 </div>
               </div>
