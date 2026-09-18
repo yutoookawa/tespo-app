@@ -13,7 +13,10 @@ import {
   CheckCircle2, 
   Clock, 
   HelpCircle,
-  AlertCircle
+  AlertCircle,
+  Camera,
+  Trash2,
+  FolderLock
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -37,21 +40,25 @@ interface Participation {
   started_at: string;
   status: 'testing' | 'completed' | 'dropped';
   feedback: string;
+  screenshot_day1?: string;
+  screenshot_day7?: string;
+  screenshot_day14?: string;
   app?: AppItem;
 }
 
-// 22人募集に対応できるよう初期値を2200ptに変更
 const INITIAL_POINTS = 2200;
 const REWARD_PER_TEST = 100;
 
 export default function Home() {
   const [apps, setApps] = useState<AppItem[]>([]);
   const [myTests, setMyTests] = useState<Participation[]>([]);
+  const [myCreatedAppIds, setMyCreatedAppIds] = useState<number[]>([]);
   const [userPoints, setUserPoints] = useState<number>(INITIAL_POINTS);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
 
   // フォームステート
   const [name, setName] = useState('');
@@ -64,7 +71,7 @@ export default function Home() {
   // 募集人数に応じた必要ポイントの動的計算（1人につき100pt）
   const requiredPointsForPost = requiredTesters * REWARD_PER_TEST;
 
-  // 初期読み込み
+  // 初期データ読み込み
   const fetchData = async () => {
     try {
       // ポイント復元（ローカル保存）
@@ -76,7 +83,11 @@ export default function Home() {
         setUserPoints(INITIAL_POINTS);
       }
 
-      // 案件取得
+      // 自分が作成した案件ID
+      const localCreated = JSON.parse(localStorage.getItem('tespo_my_created_apps') || '[]');
+      setMyCreatedAppIds(localCreated);
+
+      // 全案件取得
       const { data: appsData, error: appsErr } = await supabase
         .from('apps')
         .select('*')
@@ -84,7 +95,7 @@ export default function Home() {
       if (appsErr) throw appsErr;
       setApps(appsData || []);
 
-      // 参加履歴取得
+      // 参加中テスト取得
       const localJoined = JSON.parse(localStorage.getItem('tespo_joined_ids') || '[]');
       if (localJoined.length > 0) {
         const { data: partData, error: partErr } = await supabase
@@ -111,13 +122,11 @@ export default function Home() {
     e.preventDefault();
     setFormError('');
 
-    // 人数連動ポイントチェック
     if (userPoints < requiredPointsForPost) {
       setFormError(`この人数（${requiredTesters}人）での募集には ${requiredPointsForPost} pt 必要です。他の方のテストに参加してポイントを貯めてください。`);
       return;
     }
 
-    // URLバリデーション
     if (testUrl) {
       const isGoogleUrl = testUrl.startsWith('https://') && 
         (testUrl.includes('google.com') || testUrl.includes('play.google.com'));
@@ -152,13 +161,16 @@ export default function Home() {
 
       if (error) throw error;
 
-      // 募集人数に応じたポイントを消費
+      // ポイント消費
       const nextPoints = userPoints - requiredPointsForPost;
       setUserPoints(nextPoints);
       localStorage.setItem('tespo_user_points', String(nextPoints));
 
       if (data && data.length > 0) {
         setApps([data[0], ...apps]);
+        const updatedCreated = [...myCreatedAppIds, data[0].id];
+        setMyCreatedAppIds(updatedCreated);
+        localStorage.setItem('tespo_my_created_apps', JSON.stringify(updatedCreated));
       }
 
       setName('');
@@ -176,7 +188,36 @@ export default function Home() {
     }
   };
 
-  // テスト参加（重複防止 & タイマー開始）
+  // 自分の募集案件の削除（未完了分のポイント払い戻し）
+  const handleDeleteMyApp = async (app: AppItem) => {
+    if (!confirm(`「${app.name}」の募集を取り下げますか？\n残りの枠に応じたポイントが返還されます。`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('apps').delete().eq('id', app.id);
+      if (error) throw error;
+
+      // 未参加分のポイントを返還
+      const remainingSlots = Math.max(0, app.required_testers - app.current_testers);
+      const refundPoints = remainingSlots * REWARD_PER_TEST;
+      const nextPoints = userPoints + refundPoints;
+      setUserPoints(nextPoints);
+      localStorage.setItem('tespo_user_points', String(nextPoints));
+
+      setApps(apps.filter((a) => a.id !== app.id));
+      const updatedCreated = myCreatedAppIds.filter((id) => id !== app.id);
+      setMyCreatedAppIds(updatedCreated);
+      localStorage.setItem('tespo_my_created_apps', JSON.stringify(updatedCreated));
+
+      alert(`案件を削除しました。未募集分として ${refundPoints} pt 返還されました。`);
+    } catch (err) {
+      console.error('削除エラー:', err);
+      alert('案件の削除に失敗しました。');
+    }
+  };
+
+  // テスト参加処理
   const handleJoinTest = async (app: AppItem) => {
     const isAlreadyJoined = myTests.some((t) => t.app_id === app.id);
     if (isAlreadyJoined) {
@@ -215,10 +256,92 @@ export default function Home() {
     }
   };
 
+  // スクリーンショットのアップロード処理
+  const handleScreenshotUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>, 
+    participationId: number, 
+    dayKey: 'day1' | 'day7' | 'day14'
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const uploadKey = `${participationId}_${dayKey}`;
+    setUploadingTarget(uploadKey);
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const filePath = `proofs/${participationId}_${dayKey}_${Date.now()}.${fileExt}`;
+
+      // Supabase Storage にアップロード
+      const { error: uploadError } = await supabase.storage
+        .from('task-proofs')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // 公開URLを取得
+      const { data: publicUrlData } = supabase.storage
+        .from('task-proofs')
+        .getPublicUrl(filePath);
+
+      const dbColumn = `screenshot_${dayKey}`;
+
+      // DBを更新
+      const { error: updateError } = await supabase
+        .from('test_participations')
+        .update({ [dbColumn]: publicUrlData.publicUrl })
+        .eq('id', participationId);
+
+      if (updateError) throw updateError;
+
+      // ステート更新
+      setMyTests(myTests.map((t) => {
+        if (t.id === participationId) {
+          return { ...t, [dbColumn]: publicUrlData.publicUrl };
+        }
+        return t;
+      }));
+
+      alert(`${dayKey === 'day1' ? '1日目' : dayKey === 'day7' ? '7日目' : '14日目'} のスクショを提出しました！`);
+    } catch (err: any) {
+      console.error('アップロードエラー:', err);
+      alert('画像のアップロードに失敗しました: ' + (err.message || '通信エラー'));
+    } finally {
+      setUploadingTarget(null);
+    }
+  };
+
+  // 14日完遂によるポイント獲得処理
+  const handleCompleteTest = async (testItem: Participation) => {
+    if (testItem.status === 'completed') return;
+
+    try {
+      const { error } = await supabase
+        .from('test_participations')
+        .update({ status: 'completed' })
+        .eq('id', testItem.id);
+
+      if (error) throw error;
+
+      // ポイント加算（+100pt）
+      const nextPoints = userPoints + REWARD_PER_TEST;
+      setUserPoints(nextPoints);
+      localStorage.setItem('tespo_user_points', String(nextPoints));
+
+      setMyTests(myTests.map((t) => t.id === testItem.id ? { ...t, status: 'completed' } : t));
+      alert(`🎉 14日間のテスト完遂お疲れさまでした！\n報酬として ${REWARD_PER_TEST} pt を獲得しました！`);
+    } catch (err) {
+      console.error('完了処理エラー:', err);
+      alert('完了処理に失敗しました。');
+    }
+  };
+
   const getDaysPassed = (startDate: string) => {
     const diff = new Date().getTime() - new Date(startDate).getTime();
     return Math.floor(diff / (1000 * 60 * 60 * 24));
   };
+
+  const myCreatedApps = apps.filter((a) => myCreatedAppIds.includes(a.id));
 
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col justify-between">
@@ -263,7 +386,7 @@ export default function Home() {
             </div>
           </div>
 
-      {/* 初回訪問者向けガイド */}
+          {/* 初回訪問者向けガイド */}
           <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm text-xs text-slate-600">
             <div className="flex items-center gap-1.5 font-bold text-slate-900 mb-1 text-sm">
               <HelpCircle className="w-4 h-4 text-indigo-600" />
@@ -279,7 +402,40 @@ export default function Home() {
             </ol>
           </div>
 
-          {/* 参加中のタスク一覧 */}
+          {/* 自分の募集案件（管理・削除） */}
+          {myCreatedApps.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                  <FolderLock className="w-4 h-4 text-indigo-600" />
+                  あなたが募集中の案件
+                </h2>
+                <span className="text-xs text-slate-500 font-medium">{myCreatedApps.length} 件</span>
+              </div>
+
+              <div className="space-y-2">
+                {myCreatedApps.map((app) => (
+                  <div key={app.id} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">{app.name}</h4>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        テスター確保: <span className="font-semibold text-indigo-600">{app.current_testers}</span> / {app.required_testers} 人
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteMyApp(app)}
+                      className="text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition"
+                      title="案件を取り下げて削除"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 参加中テスト（タスク・スクショ提出） */}
           {myTests.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -290,37 +446,117 @@ export default function Home() {
                 <span className="text-xs text-indigo-600 font-semibold">{myTests.length} 件</span>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {myTests.map((t) => {
                   const days = getDaysPassed(t.started_at);
                   const isReadyToComplete = days >= 14;
+                  const isCompleted = t.status === 'completed';
+
                   return (
-                    <div key={t.id} className="bg-white p-3.5 rounded-xl border border-indigo-100 shadow-sm">
-                      <div className="flex justify-between items-start mb-2">
+                    <div key={t.id} className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm space-y-3">
+                      <div className="flex justify-between items-start">
                         <div>
-                          <span className="text-[10px] bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded">
-                            {days}日目 / 14日間
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                            isCompleted ? 'bg-emerald-50 text-emerald-700' : 'bg-indigo-50 text-indigo-700'
+                          }`}>
+                            {isCompleted ? 'テスト完了・獲得済' : `${days}日目 / 14日間`}
                           </span>
                           <h4 className="font-bold text-slate-900 text-sm mt-1">{t.app?.name || 'テスト案件'}</h4>
                         </div>
                         <span className="text-xs text-amber-600 font-bold">+{t.app?.reward_points || REWARD_PER_TEST} pt</span>
                       </div>
 
-                      <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mb-3">
+                      <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                         <div
                           className="bg-indigo-600 h-full rounded-full transition-all"
                           style={{ width: `${Math.min(100, (days / 14) * 100)}%` }}
                         />
                       </div>
 
-                      <div className="flex justify-between items-center text-xs">
+                      {/* スクショ提出エリア */}
+                      <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                        <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1 mb-2">
+                          <Camera className="w-3.5 h-3.5 text-indigo-600" />
+                          起動証明スクショ提出
+                        </p>
+                        <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                          {/* 1日目 */}
+                          <label className="border border-dashed border-slate-300 rounded p-1.5 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
+                            <span className="font-medium text-slate-600">1日目（開始）</span>
+                            {t.screenshot_day1 ? (
+                              <span className="text-emerald-600 font-bold mt-1">提出済 ✓</span>
+                            ) : uploadingTarget === `${t.id}_day1` ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600 mt-1" />
+                            ) : (
+                              <span className="text-indigo-600 mt-1">アップロード</span>
+                            )}
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={(e) => handleScreenshotUpload(e, t.id, 'day1')}
+                            />
+                          </label>
+
+                          {/* 7日目 */}
+                          <label className="border border-dashed border-slate-300 rounded p-1.5 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
+                            <span className="font-medium text-slate-600">7日目（中間）</span>
+                            {t.screenshot_day7 ? (
+                              <span className="text-emerald-600 font-bold mt-1">提出済 ✓</span>
+                            ) : uploadingTarget === `${t.id}_day7` ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600 mt-1" />
+                            ) : (
+                              <span className="text-indigo-600 mt-1">アップロード</span>
+                            )}
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={(e) => handleScreenshotUpload(e, t.id, 'day7')}
+                            />
+                          </label>
+
+                          {/* 14日目 */}
+                          <label className="border border-dashed border-slate-300 rounded p-1.5 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
+                            <span className="font-medium text-slate-600">14日目（完遂）</span>
+                            {t.screenshot_day14 ? (
+                              <span className="text-emerald-600 font-bold mt-1">提出済 ✓</span>
+                            ) : uploadingTarget === `${t.id}_day14` ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600 mt-1" />
+                            ) : (
+                              <span className="text-indigo-600 mt-1">アップロード</span>
+                            )}
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={(e) => handleScreenshotUpload(e, t.id, 'day14')}
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* 完了ボタン */}
+                      <div className="flex justify-between items-center pt-1">
                         <span className="text-slate-500 text-[11px]">
-                          {isReadyToComplete ? '14日達成！完了申請可能' : `あと ${14 - days} 日間端末に保持`}
+                          {isCompleted 
+                            ? '獲得完了' 
+                            : isReadyToComplete 
+                              ? '14日達成！完了申請可能' 
+                              : `あと ${14 - days} 日間保持`}
                         </span>
-                        {isReadyToComplete ? (
-                          <button className="bg-emerald-600 text-white px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 shadow-sm">
-                            <CheckCircle2 className="w-3 h-3" />
-                            完了してポイント獲得
+                        {isCompleted ? (
+                          <span className="text-emerald-600 font-bold text-xs flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            受取完了
+                          </span>
+                        ) : isReadyToComplete ? (
+                          <button
+                            onClick={() => handleCompleteTest(t)}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition active:scale-95"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            完了して100pt受取
                           </button>
                         ) : (
                           <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-medium">
@@ -360,6 +596,7 @@ export default function Home() {
                     Math.round((app.current_testers / app.required_testers) * 100)
                   );
                   const isJoined = myTests.some((t) => t.app_id === app.id);
+                  const isMyCreated = myCreatedAppIds.includes(app.id);
 
                   return (
                     <div
@@ -413,14 +650,18 @@ export default function Home() {
 
                         <button
                           onClick={() => handleJoinTest(app)}
-                          disabled={isJoined}
+                          disabled={isJoined || isMyCreated}
                           className={`w-full py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
-                            isJoined
+                            isMyCreated
+                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                              : isJoined
                               ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                               : 'bg-slate-900 hover:bg-slate-800 text-white active:scale-[0.99]'
                           }`}
                         >
-                          {isJoined ? (
+                          {isMyCreated ? (
+                            <span>あなたが募集した案件です</span>
+                          ) : isJoined ? (
                             <>
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                               <span>現在テスト参加中</span>
@@ -443,7 +684,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* フッター（違反報告・サポート窓口） */}
+      {/* フッター */}
       <footer className="mt-12 border-t border-slate-200 py-6 text-center text-xs text-slate-400">
         <p>© テスポ - 個人開発者のGoogle Play 20人テスト相互プラットフォーム</p>
         <div className="mt-2 flex justify-center gap-4 text-indigo-600">
