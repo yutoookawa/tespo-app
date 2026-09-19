@@ -209,15 +209,15 @@ export default function Home() {
           password: authPassword,
         });
         if (error) throw error;
-        if (data.user) {
-          await supabase.from('profiles').insert([{ 
-            id: data.user.id, 
-            email: data.user.email, 
-            username: authUsername.trim(),
-            points: INITIAL_POINTS 
-          }]);
-          alert('登録確認メールを送信しました！\nメール内のリンク（Confirm your mail）をタップして認証を完了してください。');
-        }
+       if (data.user) {
+  await supabase.from('profiles').insert([{ 
+    id: data.user.id, 
+    email: data.user.email, 
+    username: authUsername.trim(),
+    points: INITIAL_POINTS 
+  }]);
+  alert('アカウント登録が完了しました！ログインしてご利用ください。');
+}
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email: authEmail,
