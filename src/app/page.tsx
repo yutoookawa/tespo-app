@@ -831,7 +831,7 @@ export default function Home() {
         <p>© テスターズフィールド (Testers Field) - 個人開発者のGoogle Playクローズドテスト相互プラットフォーム</p>
         <p className="text-[10px] text-slate-400 mt-1">Google Play および Android は Google LLC の商標です。当サービスは Google LLC と提携・公認されたものではありません。</p>
         <div className="mt-2 flex justify-center gap-4 text-indigo-600">
-          <a href="https://forms.google.com" target="_blank" rel="noopener noreferrer" className="hover:underline">
+          <a href="https://forms.gle/3sTTB61MrBeghMTd6" target="_blank" rel="noopener noreferrer" className="hover:underline">
             不具合・違反案件の報告フォーム
           </a>
         </div>
