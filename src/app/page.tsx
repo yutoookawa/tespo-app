@@ -58,9 +58,11 @@ interface Participation {
   app?: AppItem;
 }
 
-const INITIAL_POINTS = 1500;
-const DEFAULT_TESTERS = 15;
+// 初期ポイントを0ptに変更（Xキャンペーン等で付与）
+const INITIAL_POINTS = 0;
+const FIXED_TESTERS = 15;
 const REWARD_PER_TEST = 100;
+const REQUIRED_POINTS_FOR_POST = FIXED_TESTERS * REWARD_PER_TEST; // 1,500pt
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
@@ -88,7 +90,6 @@ export default function Home() {
   // 案件投稿フォームステート
   const [name, setName] = useState('');
   const [category, setCategory] = useState('ツール');
-  const [requiredTesters, setRequiredTesters] = useState(DEFAULT_TESTERS);
   const [tagsInput, setTagsInput] = useState('');
   const [testUrl, setTestUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -103,7 +104,6 @@ export default function Home() {
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
 
   const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
-  const requiredPointsForPost = requiredTesters * REWARD_PER_TEST;
 
   // ユーザー状態監視 & 初期読み込み
   useEffect(() => {
@@ -143,8 +143,8 @@ export default function Home() {
         setUsername(fallbackName);
         setUserPoints(INITIAL_POINTS);
       } else if (data) {
-        setUsername(data.username || '名無し開発者');
-        setUserPoints(data.points);
+        setUsername(data.username || '開発者');
+        setUserPoints(data.points ?? 0);
       }
     } catch (err) {
       console.error('プロファイル取得エラー:', err);
@@ -194,7 +194,6 @@ export default function Home() {
           throw new Error('開発者名（ユーザー名）を入力してください');
         }
 
-        // 開発者名の重複チェック
         const { data: existingUser } = await supabase
           .from('profiles')
           .select('id')
@@ -242,7 +241,7 @@ export default function Home() {
     setMyTests([]);
   };
 
-  // 案件新規作成
+  // 案件新規作成（15人・1500pt固定）
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
@@ -252,8 +251,8 @@ export default function Home() {
       return;
     }
 
-    if (userPoints < requiredPointsForPost) {
-      setFormError(`この人数（${requiredTesters}人）での募集には ${requiredPointsForPost} pt 必要です。`);
+    if (userPoints < REQUIRED_POINTS_FOR_POST) {
+      setFormError(`募集には ${REQUIRED_POINTS_FOR_POST} pt 必要です。他の方のテストに参加してポイントを貯めてください。`);
       return;
     }
 
@@ -278,7 +277,7 @@ export default function Home() {
             name,
             category,
             developer: username || '開発者',
-            required_testers: Number(requiredTesters),
+            required_testers: FIXED_TESTERS,
             current_testers: 0,
             reward_points: REWARD_PER_TEST,
             tags,
@@ -289,7 +288,7 @@ export default function Home() {
 
       if (error) throw error;
 
-      const nextPoints = userPoints - requiredPointsForPost;
+      const nextPoints = userPoints - REQUIRED_POINTS_FOR_POST;
       await supabase.from('profiles').update({ points: nextPoints }).eq('id', user.id);
       setUserPoints(nextPoints);
 
@@ -299,7 +298,6 @@ export default function Home() {
 
       setName('');
       setCategory('ツール');
-      setRequiredTesters(DEFAULT_TESTERS);
       setTagsInput('');
       setTestUrl('');
       setIsModalOpen(false);
@@ -454,7 +452,7 @@ export default function Home() {
     report += `\n■ テスト結果を踏まえた対応:\n上記の指摘事項を反映し、UI改善および安定性向上の修正アップデートを実施しました。`;
 
     navigator.clipboard.writeText(report);
-    alert('📋 Google Play Console 審査用のフィードバック回答テキストをコピーしました！そのまま貼り付けて申請に使用できます。');
+    alert('📋 Google Play Console 審査用のフィードバック回答テキストをコピーしました！');
   };
 
   const getDaysPassed = (startDate: string) => {
@@ -472,8 +470,8 @@ export default function Home() {
           <div className="max-w-md mx-auto flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Smartphone className="w-6 h-6 text-indigo-600" />
-              <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
-                テスポ
+              <h1 className="text-lg font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
+                テスターズフィールド
               </h1>
             </div>
             <div className="flex items-center gap-2">
@@ -522,14 +520,14 @@ export default function Home() {
           <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl p-4 text-white shadow-md">
             <div className="flex justify-between items-center">
               <div>
-                <p className="text-xs text-indigo-100 font-medium">保有テスポポイント</p>
+                <p className="text-xs text-indigo-100 font-medium">保有ポイント</p>
                 <h2 className="text-2xl font-bold flex items-center gap-1 mt-0.5">
                   {userPoints.toLocaleString()} <span className="text-xs font-normal text-indigo-200">pt</span>
                 </h2>
               </div>
               <div className="text-right">
                 <span className="inline-block bg-white/20 backdrop-blur-sm px-2.5 py-1 rounded-full text-[11px] font-medium text-indigo-100">
-                  報酬: 100 pt / 1人あたり
+                  報酬: 100 pt / 1案件
                 </span>
               </div>
             </div>
@@ -539,20 +537,20 @@ export default function Home() {
           <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm text-xs text-slate-600">
             <div className="flex items-center gap-1.5 font-bold text-slate-900 mb-1 text-sm">
               <HelpCircle className="w-4 h-4 text-indigo-600" />
-              テスポの使い方
+              テスターズフィールドの使い方
             </div>
             <p className="text-slate-500 text-[11px] mb-2 leading-relaxed">
-              Google Play公開に必要な<strong>「12人以上・14日間のクローズドテスト」</strong>を相互に支援し合うプラットフォームです。
+              Google Play公開に必要な<strong>「12人以上・14日間のクローズドテスト」</strong>を個人開発者同士で助け合うプラットフォームです。
             </p>
             <ol className="list-decimal list-inside space-y-1.5 text-slate-600 pl-0.5 leading-normal">
-              <li><strong>アカウント登録・ログイン</strong>を行い、気になる案件のテストに参加</li>
-              <li>URL先（Googleグループ等）からアプリを入れ、<strong>14日間維持</strong>（1・7・14日目に起動スクショを提出）</li>
-              <li>14日経過後に<strong>フィードバックを記入して100pt獲得</strong></li>
-              <li>貯めたポイントで<strong>自分のアプリを募集</strong>し、集まった感想を「審査用テキスト」としてワンタップコピー</li>
+              <li><strong>ログイン</strong>して気になるアプリのテストに参加（15人枠）</li>
+              <li>URL先からインストールし、<strong>14日間維持</strong>（1・7・14日目に起動スクショ提出）</li>
+              <li>14日経過後に<strong>フィードバックを記入して 100 pt 獲得</strong></li>
+              <li>貯めたポイント（1,500pt）で<strong>自分のアプリのテスター15人を募集</strong>！</li>
             </ol>
           </div>
 
-          {/* 自分の募集案件（管理・審査用出力） */}
+          {/* 自分の募集案件 */}
           {myCreatedApps.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -595,7 +593,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* 参加中テスト（タスク・スクショ・フィードバック） */}
+          {/* 参加中テスト */}
           {myTests.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -716,7 +714,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* 募集中の案件一覧（シンプル見出しに変更） */}
+          {/* 募集中の案件一覧 */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-bold text-slate-800 text-sm">募集中のテスト案件</h2>
@@ -731,7 +729,6 @@ export default function Home() {
             ) : apps.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-500 p-6">
                 <p className="text-sm">現在募集中のテスト案件はありません。</p>
-                <p className="text-xs text-slate-400 mt-1">ログイン後、最初の案件を募集してみましょう！</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -790,7 +787,7 @@ export default function Home() {
                               style={{ width: `${progress}%` }}
                             />
                           </div>
-                          <p className="text-[10px] text-slate-400">※ Google Play要件: 12人以上の14日維持（推奨15人）</p>
+                          <p className="text-[10px] text-slate-400">※ Google Play要件: 12人以上の14日維持（15人固定枠）</p>
                         </div>
 
                         <button
@@ -831,10 +828,11 @@ export default function Home() {
 
       {/* フッター */}
       <footer className="mt-12 border-t border-slate-200 py-6 text-center text-xs text-slate-400">
-        <p>© テスポ - 個人開発者のGoogle Playクローズドテスト相互プラットフォーム</p>
+        <p>© テスターズフィールド (Testers Field) - 個人開発者のGoogle Playクローズドテスト相互プラットフォーム</p>
+        <p className="text-[10px] text-slate-400 mt-1">Google Play および Android は Google LLC の商標です。当サービスは Google LLC と提携・公認されたものではありません。</p>
         <div className="mt-2 flex justify-center gap-4 text-indigo-600">
           <a href="https://forms.google.com" target="_blank" rel="noopener noreferrer" className="hover:underline">
-            不具合・違反案件の報告
+            不具合・違反案件の報告フォーム
           </a>
         </div>
       </footer>
@@ -844,7 +842,7 @@ export default function Home() {
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-xl animate-in fade-in zoom-in duration-200">
             <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-slate-900 text-base">{isSignUp ? 'テスポに新規登録' : 'ログイン'}</h3>
+              <h3 className="font-bold text-slate-900 text-base">{isSignUp ? '新規登録' : 'ログイン'}</h3>
               <button onClick={() => setIsAuthModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
@@ -1011,7 +1009,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* 案件募集モーダル */}
+      {/* 案件募集モーダル（15人・1,500pt固定） */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 shadow-xl max-h-[90vh] overflow-y-auto">
@@ -1019,7 +1017,7 @@ export default function Home() {
               <div>
                 <h3 className="font-bold text-slate-900 text-base">テスト案件を募集する</h3>
                 <p className="text-[11px] text-slate-500">
-                  必要: <span className="font-bold text-indigo-600">{requiredPointsForPost} pt</span>（残高: {userPoints} pt）
+                  必要: <span className="font-bold text-indigo-600">{REQUIRED_POINTS_FOR_POST} pt</span>（残高: {userPoints} pt）
                 </p>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
@@ -1087,27 +1085,19 @@ export default function Home() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">募集人数（推奨15人）</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={requiredTesters}
-                    onChange={(e) => setRequiredTesters(Math.max(1, Number(e.target.value)))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-indigo-600"
-                  />
+              {/* 固定設定の案内枠 */}
+              <div className="bg-indigo-50/70 border border-indigo-100 rounded-lg p-3 text-xs text-indigo-900 space-y-1">
+                <div className="flex justify-between font-semibold">
+                  <span>募集テスター人数:</span>
+                  <span>15人（固定）</span>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">消費ポイント合計</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={`${requiredPointsForPost} pt`}
-                    className="w-full px-3 py-2 border border-slate-200 bg-slate-100 font-bold text-slate-700 rounded-lg text-sm cursor-not-allowed"
-                  />
+                <div className="flex justify-between text-slate-600 text-[11px]">
+                  <span>消費ポイント:</span>
+                  <span className="font-bold text-indigo-700">1,500 pt</span>
                 </div>
+                <p className="text-[10px] text-slate-400 pt-1 border-t border-indigo-100/50">
+                  ※ Google Playの12人要件に対し、離脱リスクを考慮した推奨15人枠固定です。
+                </p>
               </div>
 
               <div>
@@ -1124,10 +1114,10 @@ export default function Home() {
               <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={isSubmitting || userPoints < requiredPointsForPost}
+                  disabled={isSubmitting || userPoints < REQUIRED_POINTS_FOR_POST}
                   className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm transition shadow flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
-                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>{requiredPointsForPost} pt で募集する</span>}
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>1,500 pt で募集する</span>}
                 </button>
               </div>
             </form>
