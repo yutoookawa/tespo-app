@@ -24,7 +24,9 @@ import {
   Menu,
   BookOpen,
   Share2,
-  Info
+  Info,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -92,6 +94,7 @@ export default function Home() {
   const [authPassword, setAuthPassword] = useState('');
   const [authUsername, setAuthUsername] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
+  const [hasJoinedGroup, setHasJoinedGroup] = useState(false); // グループ参加同意フラグ
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
 
@@ -200,6 +203,10 @@ export default function Home() {
           throw new Error('開発者名（ユーザー名）を入力してください');
         }
 
+        if (!hasJoinedGroup) {
+          throw new Error('公式Googleグループへの参加確認チェックを入れてください');
+        }
+
         const { data: existingUser } = await supabase
           .from('profiles')
           .select('id')
@@ -222,7 +229,7 @@ export default function Home() {
             username: authUsername.trim(),
             points: INITIAL_POINTS 
           }]);
-          alert('アカウント登録が完了しました！ログインしてご利用ください。\n※続いて公式Googleグループへの参加もお忘れなく！');
+          alert('アカウント登録が完了しました！ログインしてご利用ください。');
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -509,7 +516,10 @@ export default function Home() {
                 </div>
               ) : (
                 <button
-                  onClick={() => setIsAuthModalOpen(true)}
+                  onClick={() => {
+                    setIsSignUp(false);
+                    setIsAuthModalOpen(true);
+                  }}
                   className="text-xs text-indigo-600 hover:bg-indigo-50 flex items-center gap-1 border border-indigo-200 px-2.5 py-1.5 rounded-full font-semibold"
                 >
                   <LogIn className="w-3.5 h-3.5" />
@@ -520,6 +530,7 @@ export default function Home() {
                 onClick={() => {
                   setFormError('');
                   if (!user) {
+                    setIsSignUp(false);
                     setIsAuthModalOpen(true);
                   } else {
                     setIsModalOpen(true);
@@ -550,19 +561,19 @@ export default function Home() {
                 </div>
 
                 {/* 統一Googleグループ参加推奨カード */}
-                <div className="bg-indigo-50/80 border border-indigo-100 rounded-xl p-3 text-xs">
-                  <p className="font-bold text-indigo-900 flex items-center gap-1 mb-1">
-                    <Users className="w-3.5 h-3.5 text-indigo-600" />
-                    公式Googleグループ
+                <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-xl p-3.5 text-xs shadow-sm">
+                  <p className="font-bold text-indigo-950 flex items-center gap-1 mb-1">
+                    <Users className="w-4 h-4 text-indigo-600" />
+                    公式Googleグループ（参加必須）
                   </p>
-                  <p className="text-slate-600 text-[11px] leading-relaxed mb-2.5">
-                    参加すると全案件のテスト承認がワンタップで行えるようになります。
+                  <p className="text-slate-600 text-[11px] leading-relaxed mb-3">
+                    参加しないとPlayストアで「アイテムが見つかりません」とエラーになります。
                   </p>
                   <a
                     href={GOOGLE_GROUP_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block text-center py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs shadow transition"
+                    className="block text-center py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow transition"
                   >
                     グループに参加する（無料）
                   </a>
@@ -610,7 +621,35 @@ export default function Home() {
           </div>
         )}
 
-        <div className="max-w-md mx-auto px-4 pt-4 space-y-5">
+        <div className="max-w-md mx-auto px-4 pt-4 space-y-4">
+          {/* トップ画面常設：Googleグループ参加強調バナー */}
+          <div className="bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-violet-500/10 border-2 border-indigo-200 rounded-2xl p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-sm mt-0.5">
+                <Users className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                  【重要】公式Googleグループへ参加
+                </h3>
+                <p className="text-slate-600 text-xs mt-1 leading-relaxed">
+                  グループ未参加の場合、アプリのインストール時に<strong>「アイテムが見つかりませんでした」</strong>と表示されテストに参加できません。
+                </p>
+                <div className="mt-3">
+                  <a
+                    href={GOOGLE_GROUP_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow transition"
+                  >
+                    <span>Googleグループに参加する（無料）</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* ポイント残高 */}
           <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl p-4 text-white shadow-md">
             <div className="flex justify-between items-center">
@@ -943,25 +982,38 @@ export default function Home() {
               </button>
             </div>
 
-            {/* 新規登録時のみ公式Googleグループ参加案内を表示 */}
+            {/* 新規登録時：必須Googleグループ参加案内＆チェック */}
             {isSignUp && (
-              <div className="mb-4 bg-indigo-50 border border-indigo-100 rounded-xl p-3 text-xs">
-                <p className="font-bold text-indigo-900 mb-1 flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5 text-indigo-600" />
-                  【重要】登録前にグループ参加が必要です
+              <div className="mb-4 bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-xl p-3.5 text-xs shadow-sm">
+                <p className="font-bold text-indigo-950 mb-1 flex items-center gap-1">
+                  <Users className="w-4 h-4 text-indigo-600" />
+                  STEP 1: 公式Googleグループへの参加（必須）
                 </p>
-                <p className="text-slate-600 text-[11px] leading-relaxed mb-2">
-                  テスターズフィールド公式Googleグループに参加していないと、各アプリのインストール時にエラーになります。
+                <p className="text-slate-600 text-[11px] leading-relaxed mb-2.5">
+                  未参加の場合、アプリのインストール時に「アイテムが見つかりませんでした」とエラーになります。
                 </p>
                 <a
                   href={GOOGLE_GROUP_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs transition"
+                  className="flex items-center justify-center gap-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow transition mb-3"
                 >
-                  <span>公式Googleグループに参加する</span>
-                  <ExternalLink className="w-3 h-3" />
+                  <span>公式Googleグループに参加する（無料）</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
                 </a>
+
+                {/* 参加同意チェックボックス */}
+                <label className="flex items-start gap-2 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2 rounded-lg border border-indigo-100">
+                  <input
+                    type="checkbox"
+                    checked={hasJoinedGroup}
+                    onChange={(e) => setHasJoinedGroup(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <span className="text-[11px] leading-tight">
+                    公式Googleグループへの参加を完了しました <span className="text-red-500">*必須</span>
+                  </span>
+                </label>
               </div>
             )}
 
@@ -1012,10 +1064,16 @@ export default function Home() {
                 />
               </div>
 
+              {isSignUp && !hasJoinedGroup && (
+                <p className="text-[11px] text-red-500 text-center font-medium">
+                  ※上記の「グループへの参加」とチェックボックスの同意が必要です
+                </p>
+              )}
+
               <button
                 type="submit"
-                disabled={authLoading}
-                className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm transition shadow"
+                disabled={authLoading || (isSignUp && !hasJoinedGroup)}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm transition shadow disabled:bg-slate-300 disabled:cursor-not-allowed"
               >
                 {authLoading ? '処理中...' : isSignUp ? '登録案内メールを送信' : 'ログイン'}
               </button>
@@ -1026,6 +1084,7 @@ export default function Home() {
                 onClick={() => {
                   setIsSignUp(!isSignUp);
                   setAuthError('');
+                  setHasJoinedGroup(false);
                 }}
                 className="text-xs text-indigo-600 hover:underline"
               >
