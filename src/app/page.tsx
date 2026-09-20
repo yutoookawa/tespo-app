@@ -27,7 +27,7 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
-  AlertTriangle
+  FileText
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -92,7 +92,7 @@ export default function Home() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [activeManualModal, setActiveManualModal] = useState<'about' | 'dev' | 'tester' | null>(null);
+  const [activeManualModal, setActiveManualModal] = useState<'about' | 'dev' | 'tester' | 'terms' | null>(null);
   const [activeCompletingTest, setActiveCompletingTest] = useState<Participation | null>(null);
   
   // 認証フォームステート
@@ -567,19 +567,19 @@ export default function Home() {
                   </button>
                 </div>
 
-                <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-xl p-3.5 text-xs shadow-sm">
-                  <p className="font-bold text-indigo-950 flex items-center gap-1 mb-1">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs">
+                  <p className="font-bold text-slate-900 flex items-center gap-1 mb-1">
                     <Users className="w-4 h-4 text-indigo-600" />
                     公式Googleグループ（参加必須）
                   </p>
-                  <p className="text-slate-600 text-[11px] leading-relaxed mb-3">
+                  <p className="text-slate-500 text-[11px] leading-relaxed mb-3">
                     参加しないとPlayストアで「アイテムが見つかりません」とエラーになります。
                   </p>
                   <a
                     href={GOOGLE_GROUP_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block text-center py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow transition"
+                    className="block text-center py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow-xs transition"
                   >
                     グループに参加する（無料）
                   </a>
@@ -607,18 +607,25 @@ export default function Home() {
                     <CheckCircle2 className="w-4 h-4 text-indigo-600" />
                     <span>テスター向けマニュアル（参加）</span>
                   </button>
+                  <button
+                    onClick={() => { setIsMenuOpen(false); setActiveManualModal('terms'); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 transition text-left"
+                  >
+                    <FileText className="w-4 h-4 text-indigo-600" />
+                    <span>利用規約</span>
+                  </button>
                 </div>
               </div>
 
               <div className="pt-4 border-t border-slate-100 space-y-2">
                 <button
                   onClick={handleShareApp}
-                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
+                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-xs"
                 >
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Xでサービスをシェア</span>
                 </button>
-                <p className="text-[10px] text-slate-400 text-center">Version 1.2.1</p>
+                <p className="text-[10px] text-slate-400 text-center">Version 1.2.2</p>
               </div>
             </div>
             <div className="flex-1" onClick={() => setIsMenuOpen(false)} />
@@ -626,7 +633,7 @@ export default function Home() {
         )}
 
         <div className="max-w-md mx-auto px-4 pt-3 space-y-3">
-          {/* 保有ポイント ＆ 強調表示された公式Googleグループ参加ボタン */}
+          {/* 保有ポイント ＆ 見やすいトーンの公式Googleグループ参加ボタン */}
           <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-xl px-3.5 py-2.5 text-white shadow-sm flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="text-xs text-indigo-100">保有:</span>
@@ -635,17 +642,14 @@ export default function Home() {
               </span>
             </div>
 
-            {/* 強調版公式グループボタン */}
             <a
               href={GOOGLE_GROUP_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="relative inline-flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-black px-3 py-1.5 rounded-lg shadow-md transition active:scale-95 border border-amber-200 animate-pulse"
-              title="参加しないとアプリをインストールできません"
+              className="inline-flex items-center gap-1 bg-white text-indigo-700 hover:bg-indigo-50 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition active:scale-95 border border-indigo-100"
             >
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-900 flex-shrink-0" />
-              <span>【必須】公式グループ参加</span>
-              <ExternalLink className="w-3 h-3 text-slate-700 flex-shrink-0 ml-0.5" />
+              <span>【必須！】公式グループ参加</span>
+              <ExternalLink className="w-3 h-3 text-indigo-500 ml-0.5" />
             </a>
           </div>
 
@@ -1011,25 +1015,25 @@ export default function Home() {
             </div>
 
             {isSignUp && (
-              <div className="mb-4 bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-xl p-3.5 text-xs shadow-sm">
-                <p className="font-bold text-indigo-950 mb-1 flex items-center gap-1">
+              <div className="mb-4 bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs">
+                <p className="font-bold text-slate-900 mb-1 flex items-center gap-1">
                   <Users className="w-4 h-4 text-indigo-600" />
                   STEP 1: 公式Googleグループへの参加（必須）
                 </p>
-                <p className="text-slate-600 text-[11px] leading-relaxed mb-2.5">
+                <p className="text-slate-500 text-[11px] leading-relaxed mb-2.5">
                   未参加の場合、アプリのインストール時に「アイテムが見つかりませんでした」とエラーになります。
                 </p>
                 <a
                   href={GOOGLE_GROUP_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow transition mb-3"
+                  className="flex items-center justify-center gap-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-xs transition mb-3"
                 >
                   <span>公式Googleグループに参加する（無料）</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
 
-                <label className="flex items-start gap-2 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2 rounded-lg border border-indigo-100">
+                <label className="flex items-start gap-2 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2 rounded-lg border border-slate-200">
                   <input
                     type="checkbox"
                     checked={hasJoinedGroup}
@@ -1099,7 +1103,7 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={authLoading || (isSignUp && !hasJoinedGroup)}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm transition shadow disabled:bg-slate-300 disabled:cursor-not-allowed"
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm transition shadow-xs disabled:bg-slate-300 disabled:cursor-not-allowed"
               >
                 {authLoading ? '処理中...' : isSignUp ? '登録案内メールを送信' : 'ログイン'}
               </button>
@@ -1220,7 +1224,7 @@ export default function Home() {
                 <button
                   type="submit"
                   disabled={feedbackSubmitting || goodPoints.trim().length < 20 || improvements.trim().length < 20 || !deviceModel.trim()}
-                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm transition shadow flex items-center justify-center gap-1.5 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm transition shadow-xs flex items-center justify-center gap-1.5 disabled:bg-slate-300 disabled:cursor-not-allowed"
                 >
                   {feedbackSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>提出して 100 pt を獲得</span>}
                 </button>
@@ -1246,10 +1250,10 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="mb-3 bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 text-xs text-indigo-950">
-              <span className="font-bold block mb-1">⚠️ 案件投稿前の確認事項</span>
+            <div className="mb-3 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-700">
+              <span className="font-bold block mb-1 text-slate-900">⚠️ 案件投稿前の確認事項</span>
               Google Play Consoleのクローズドテストのテスター欄に、公式Googleグループのアドレスを追加してください：
-              <div className="mt-1 flex items-center justify-between bg-white border border-indigo-200 rounded px-2 py-1 text-[11px] font-mono text-indigo-700">
+              <div className="mt-1 flex items-center justify-between bg-white border border-slate-200 rounded px-2 py-1 text-[11px] font-mono text-indigo-700">
                 <span>{GOOGLE_GROUP_EMAIL}</span>
                 <button
                   type="button"
@@ -1325,8 +1329,8 @@ export default function Home() {
                 <p className="text-[10px] text-slate-400 mt-1">※ Consoleでテスターを追加した後に発行されるWeb参加URLです。</p>
               </div>
 
-              <div className="bg-indigo-50/70 border border-indigo-100 rounded-lg p-3 text-xs text-indigo-900 space-y-1">
-                <div className="flex justify-between font-semibold">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-700 space-y-1">
+                <div className="flex justify-between font-semibold text-slate-900">
                   <span>募集テスター人数:</span>
                   <span>15人（固定）</span>
                 </div>
@@ -1334,7 +1338,7 @@ export default function Home() {
                   <span>消費ポイント:</span>
                   <span className="font-bold text-indigo-700">1,500 pt</span>
                 </div>
-                <p className="text-[10px] text-slate-400 pt-1 border-t border-indigo-100/50">
+                <p className="text-[10px] text-slate-400 pt-1 border-t border-slate-200">
                   ※ Google Playの12人要件に対し、離脱リスクを考慮した推奨15人枠固定です。
                 </p>
               </div>
@@ -1354,7 +1358,7 @@ export default function Home() {
                 <button
                   type="submit"
                   disabled={isSubmitting || userPoints < REQUIRED_POINTS_FOR_POST}
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm transition shadow flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm transition shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
                   {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>1,500 pt で募集する</span>}
                 </button>
@@ -1364,7 +1368,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* マニュアル・紹介モーダル */}
+      {/* マニュアル・紹介・利用規約モーダル */}
       {activeManualModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-2xl p-5 shadow-xl max-h-[85vh] overflow-y-auto">
@@ -1373,6 +1377,7 @@ export default function Home() {
                 {activeManualModal === 'about' && 'テスターズフィールドとは？'}
                 {activeManualModal === 'dev' && '開発者向けマニュアル（募集手順）'}
                 {activeManualModal === 'tester' && 'テスター向けマニュアル（参加手順）'}
+                {activeManualModal === 'terms' && '利用規約'}
               </h3>
               <button onClick={() => setActiveManualModal(null)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
@@ -1434,6 +1439,34 @@ export default function Home() {
                 <div>
                   <h4 className="font-bold text-slate-900 text-sm mb-1">STEP 4: フィードバック回答で100pt獲得</h4>
                   <p>14日経過後、「フィードバックを書いて100pt受取」から感想を入力するとポイントが付与されます。</p>
+                </div>
+              </div>
+            )}
+
+            {activeManualModal === 'terms' && (
+              <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">第1条（適用および目的）</h4>
+                  <p>本利用規約は、テスターズフィールド（以下「当サービス」）が提供するすべてのサービスの利用条件を定めるものです。当サービスは個人開発者同士が相互にGoogle Playのクローズドテストを協力し合うことを目的としています。</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">第2条（禁止事項）</h4>
+                  <p>ユーザーは以下の行為を行ってはなりません：</p>
+                  <ul className="list-disc list-inside space-y-0.5 pl-1">
+                    <li>テスト参加後の即時アンインストールやテスト維持の放棄</li>
+                    <li>無意味な文字列やAIによる自動生成など、著しく不誠実なフィードバックの送信</li>
+                    <li>マルウェア、スパム、公序良俗に反するアプリの登録</li>
+                    <li>複数アカウントの作成やポイントの不正取得・売買行為</li>
+                    <li>その他、当サービスの運営を妨害する行為</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">第3条（免責事項）</h4>
+                  <p>当サービスはGoogle LLCとの提携関係にはありません。Google Play Consoleの審査通過や本番公開を保証するものではなく、テスト結果や審査結果について当サービスは一切の責任を負いません。</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">第4条（利用停止）</h4>
+                  <p>規約違反が認められた場合、運営者は事前の通知なくアカウントの停止、ポイントの失効、または登録アプリの削除を行うことができるものとします。</p>
                 </div>
               </div>
             )}
