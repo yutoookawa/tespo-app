@@ -25,8 +25,8 @@ import {
   BookOpen,
   Share2,
   Info,
-  CheckSquare,
-  Square
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -80,6 +80,11 @@ export default function Home() {
   const [myTests, setMyTests] = useState<Participation[]>([]);
   const [allParticipations, setAllParticipations] = useState<Participation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // 表示タブ管理 ('explore' = 募集中, 'joined' = 参加中, 'my_apps' = 自作案件)
+  const [activeTab, setActiveTab] = useState<'explore' | 'joined' | 'my_apps'>('explore');
+  // 使い方アコーディオン開閉
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
   
   // モーダル・ドロワーステート
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -94,7 +99,7 @@ export default function Home() {
   const [authPassword, setAuthPassword] = useState('');
   const [authUsername, setAuthUsername] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
-  const [hasJoinedGroup, setHasJoinedGroup] = useState(false); // グループ参加同意フラグ
+  const [hasJoinedGroup, setHasJoinedGroup] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
 
@@ -313,6 +318,7 @@ export default function Home() {
       setTagsInput('');
       setTestUrl('');
       setIsModalOpen(false);
+      setActiveTab('my_apps'); // 投稿後、自動的に自作案件タブへ移動
     } catch (err: any) {
       setFormError('投稿に失敗しました: ' + err.message);
     } finally {
@@ -485,7 +491,7 @@ export default function Home() {
     <main className="min-h-screen bg-slate-50 flex flex-col justify-between">
       <div>
         {/* ヘッダー */}
-        <header className="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 py-3 shadow-sm">
+        <header className="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 py-2.5 shadow-sm">
           <div className="max-w-md mx-auto flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <button 
@@ -503,7 +509,7 @@ export default function Home() {
             <div className="flex items-center gap-2">
               {user ? (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-1 rounded-full border border-slate-200">
+                  <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-1 rounded-full border border-slate-200 max-w-[100px] truncate">
                     {username}
                   </span>
                   <button
@@ -560,7 +566,6 @@ export default function Home() {
                   </button>
                 </div>
 
-                {/* 統一Googleグループ参加推奨カード */}
                 <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-xl p-3.5 text-xs shadow-sm">
                   <p className="font-bold text-indigo-950 flex items-center gap-1 mb-1">
                     <Users className="w-4 h-4 text-indigo-600" />
@@ -579,7 +584,6 @@ export default function Home() {
                   </a>
                 </div>
 
-                {/* メニューナビゲーション */}
                 <div className="space-y-1 text-sm font-medium text-slate-700">
                   <button
                     onClick={() => { setIsMenuOpen(false); setActiveManualModal('about'); }}
@@ -605,7 +609,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 下部シェアボタン */}
               <div className="pt-4 border-t border-slate-100 space-y-2">
                 <button
                   onClick={handleShareApp}
@@ -614,138 +617,223 @@ export default function Home() {
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Xでサービスをシェア</span>
                 </button>
-                <p className="text-[10px] text-slate-400 text-center">Version 1.1.0</p>
+                <p className="text-[10px] text-slate-400 text-center">Version 1.2.0</p>
               </div>
             </div>
             <div className="flex-1" onClick={() => setIsMenuOpen(false)} />
           </div>
         )}
 
-        <div className="max-w-md mx-auto px-4 pt-4 space-y-4">
-          {/* トップ画面常設：Googleグループ参加強調バナー */}
-          <div className="bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-violet-500/10 border-2 border-indigo-200 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-sm mt-0.5">
-                <Users className="w-5 h-5" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                  【重要】公式Googleグループへ参加
-                </h3>
-                <p className="text-slate-600 text-xs mt-1 leading-relaxed">
-                  グループ未参加の場合、アプリのインストール時に<strong>「アイテムが見つかりませんでした」</strong>と表示されテストに参加できません。
+        <div className="max-w-md mx-auto px-4 pt-3 space-y-3">
+          {/* コンパクト統合バー: ポイント残高 ＆ Googleグループ案内 */}
+          <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-xl px-3.5 py-2.5 text-white shadow-sm flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs text-indigo-100">保有:</span>
+              <span className="text-xl font-bold flex items-baseline gap-0.5">
+                {userPoints.toLocaleString()} <span className="text-[10px] font-normal text-indigo-200">pt</span>
+              </span>
+            </div>
+            <a
+              href={GOOGLE_GROUP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold px-2.5 py-1 rounded-full transition backdrop-blur-sm border border-white/20"
+            >
+              <Users className="w-3 h-3" />
+              <span>公式グループ参加</span>
+              <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
+            </a>
+          </div>
+
+          {/* 開閉式使い方ガイド（場所を取らないアコーディオン） */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+            <button
+              onClick={() => setIsGuideOpen(!isGuideOpen)}
+              className="w-full px-3.5 py-2 text-xs font-semibold text-slate-700 flex items-center justify-between hover:bg-slate-50 transition"
+            >
+              <span className="flex items-center gap-1.5">
+                <HelpCircle className="w-3.5 h-3.5 text-indigo-600" />
+                <span>テスターズフィールドの使い方</span>
+              </span>
+              <span className="text-[11px] text-slate-400 flex items-center gap-0.5 font-normal">
+                {isGuideOpen ? '閉じる' : '詳細を開く'}
+                {isGuideOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </span>
+            </button>
+            {isGuideOpen && (
+              <div className="px-3.5 pb-3 pt-1 text-[11px] text-slate-600 border-t border-slate-100 bg-slate-50/50 space-y-1.5">
+                <p className="text-slate-500 leading-relaxed">
+                  Google Play公開に必要な<strong>「12人以上・14日間のクローズドテスト」</strong>を個人開発者同士で助け合うプラットフォームです。
                 </p>
-                <div className="mt-3">
-                  <a
-                    href={GOOGLE_GROUP_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow transition"
-                  >
-                    <span>Googleグループに参加する（無料）</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
+                <ol className="list-decimal list-inside space-y-1 text-slate-600 pl-0.5 leading-normal">
+                  <li><strong>公式Googleグループに参加</strong>（未参加だとインストール不可）</li>
+                  <li>気になるアプリのテストに参加し、<strong>14日間維持</strong>（1・7・14日目にスクショ提出）</li>
+                  <li>14日経過後に<strong>フィードバック記入で 100 pt 獲得</strong></li>
+                  <li>貯めたポイント（1,500pt）で<strong>自分のアプリのテスター15人を募集</strong>！</li>
+                </ol>
+              </div>
+            )}
+          </div>
+
+          {/* 案件切り替えタブ（1タップで切り替え可能） */}
+          <div className="flex bg-slate-200/80 p-1 rounded-xl text-xs font-bold text-slate-600">
+            <button
+              onClick={() => setActiveTab('explore')}
+              className={`flex-1 py-1.5 rounded-lg text-center transition ${
+                activeTab === 'explore'
+                  ? 'bg-white text-indigo-600 shadow-xs'
+                  : 'hover:text-slate-900'
+              }`}
+            >
+              募集中 ({apps.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('joined')}
+              className={`flex-1 py-1.5 rounded-lg text-center transition ${
+                activeTab === 'joined'
+                  ? 'bg-white text-indigo-600 shadow-xs'
+                  : 'hover:text-slate-900'
+              }`}
+            >
+              参加中 ({myTests.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('my_apps')}
+              className={`flex-1 py-1.5 rounded-lg text-center transition ${
+                activeTab === 'my_apps'
+                  ? 'bg-white text-indigo-600 shadow-xs'
+                  : 'hover:text-slate-900'
+              }`}
+            >
+              自分の案件 ({myCreatedApps.length})
+            </button>
+          </div>
+
+          {/* ================= タブ1: 募集中のテスト案件（最優先・ファーストビュー直結） ================= */}
+          {activeTab === 'explore' && (
+            <div className="space-y-3 pt-1">
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                  <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-2" />
+                  <p className="text-sm">案件を読み込み中...</p>
                 </div>
-              </div>
-            </div>
-          </div>
+              ) : apps.length === 0 ? (
+                <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-500 p-6">
+                  <p className="text-sm">現在募集中のテスト案件はありません。</p>
+                </div>
+              ) : (
+                apps.map((app) => {
+                  const progress = Math.min(
+                    100,
+                    Math.round((app.current_testers / app.required_testers) * 100)
+                  );
+                  const isJoined = myTests.some((t) => t.app_id === app.id);
+                  const isMyCreated = user && app.user_id === user.id;
 
-          {/* ポイント残高 */}
-          <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl p-4 text-white shadow-md">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-xs text-indigo-100 font-medium">保有ポイント</p>
-                <h2 className="text-2xl font-bold flex items-center gap-1 mt-0.5">
-                  {userPoints.toLocaleString()} <span className="text-xs font-normal text-indigo-200">pt</span>
-                </h2>
-              </div>
-              <div className="text-right">
-                <span className="inline-block bg-white/20 backdrop-blur-sm px-2.5 py-1 rounded-full text-[11px] font-medium text-indigo-100">
-                  報酬: 100 pt / 1案件
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 使い方ガイド */}
-          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm text-xs text-slate-600">
-            <div className="flex items-center gap-1.5 font-bold text-slate-900 mb-1 text-sm">
-              <HelpCircle className="w-4 h-4 text-indigo-600" />
-              テスターズフィールドの使い方
-            </div>
-            <p className="text-slate-500 text-[11px] mb-2 leading-relaxed">
-              Google Play公開に必要な<strong>「12人以上・14日間のクローズドテスト」</strong>を個人開発者同士で助け合うプラットフォームです。
-            </p>
-            <ol className="list-decimal list-inside space-y-1.5 text-slate-600 pl-0.5 leading-normal">
-              <li><strong>ログイン</strong>して気になるアプリのテストに参加（15人枠）</li>
-              <li>URL先からインストールし、<strong>14日間維持</strong>（1・7・14日目に起動スクショ提出）</li>
-              <li>14日経過後に<strong>フィードバックを記入して 100 pt 獲得</strong></li>
-              <li>貯めたポイント（1,500pt）で<strong>自分のアプリのテスター15人を募集</strong>！</li>
-            </ol>
-          </div>
-
-          {/* 自分の募集案件 */}
-          {myCreatedApps.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                  <FolderLock className="w-4 h-4 text-indigo-600" />
-                  あなたが募集中の案件
-                </h2>
-                <span className="text-xs text-slate-500 font-medium">{myCreatedApps.length} 件</span>
-              </div>
-
-              <div className="space-y-2">
-                {myCreatedApps.map((app) => (
-                  <div key={app.id} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-sm">{app.name}</h4>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          テスター確保: <span className="font-semibold text-indigo-600">{app.current_testers}</span> / {app.required_testers} 人
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteMyApp(app)}
-                        className="text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition"
-                        title="案件を取り下げて削除"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <button
-                      onClick={() => handleCopyReviewText(app.id)}
-                      className="w-full py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                  return (
+                    <div
+                      key={app.id}
+                      className="bg-white rounded-xl p-4 border border-slate-200 shadow-xs flex flex-col justify-between"
                     >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>審査申請用フィードバックをコピー</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
+                      <div>
+                        <div className="flex justify-between items-start mb-1.5">
+                          <div>
+                            <span className="inline-block text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full mb-1">
+                              {app.category}
+                            </span>
+                            <h3 className="font-bold text-slate-900 text-base">{app.name}</h3>
+                            <p className="text-xs text-slate-500 mt-0.5 font-medium">{app.developer}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-100">
+                              +{app.reward_points} pt
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          {app.tags?.map((tag, idx) => (
+                            <span key={idx} className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="space-y-1 mb-2.5">
+                          <div className="flex justify-between text-xs text-slate-500 font-medium">
+                            <span className="flex items-center gap-1">
+                              <Users className="w-3.5 h-3.5 text-slate-400" />
+                              テスター確保状況
+                            </span>
+                            <span>
+                              {app.current_testers} / {app.required_testers} 人
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div
+                              className="bg-indigo-600 h-full rounded-full transition-all duration-300"
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleJoinTest(app)}
+                          disabled={Boolean(isJoined || isMyCreated)}
+                          className={`w-full py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                            isMyCreated
+                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                              : isJoined
+                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                              : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm active:scale-[0.99]'
+                          }`}
+                        >
+                          {isMyCreated ? (
+                            <span>あなたが募集した案件です</span>
+                          ) : isJoined ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                              <span>現在テスト参加中</span>
+                            </>
+                          ) : (
+                            <>
+                              <Calendar className="w-3.5 h-3.5 text-indigo-200" />
+                              <span>14日間のテストに参加する</span>
+                              <ExternalLink className="w-3 h-3 text-white/70 ml-0.5" />
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           )}
 
-          {/* 参加中テスト */}
-          {myTests.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-indigo-600" />
-                  参加中のテスト（14日間維持）
-                </h2>
-                <span className="text-xs text-indigo-600 font-semibold">{myTests.length} 件</span>
-              </div>
-
-              <div className="space-y-3">
-                {myTests.map((t) => {
+          {/* ================= タブ2: 参加中のテスト（14日間維持） ================= */}
+          {activeTab === 'joined' && (
+            <div className="space-y-3 pt-1">
+              {myTests.length === 0 ? (
+                <div className="text-center py-10 bg-white rounded-xl border border-slate-200 text-slate-500 p-6">
+                  <p className="text-xs">現在参加中のテストはありません。</p>
+                  <button
+                    onClick={() => setActiveTab('explore')}
+                    className="mt-3 text-xs text-indigo-600 font-bold hover:underline inline-block"
+                  >
+                    募集中のテストを探す →
+                  </button>
+                </div>
+              ) : (
+                myTests.map((t) => {
                   const days = getDaysPassed(t.started_at);
                   const isReadyToComplete = days >= 14;
                   const isCompleted = t.status === 'completed';
 
                   return (
-                    <div key={t.id} className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm space-y-3">
+                    <div key={t.id} className="bg-white p-4 rounded-xl border border-indigo-100 shadow-xs space-y-3">
                       <div className="flex justify-between items-start">
                         <div>
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
@@ -765,7 +853,6 @@ export default function Home() {
                         />
                       </div>
 
-                      {/* スクショ提出 */}
                       <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                         <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1 mb-2">
                           <Camera className="w-3.5 h-3.5 text-indigo-600" />
@@ -810,13 +897,12 @@ export default function Home() {
                         </div>
                       </div>
 
-                      {/* 完了ボタン */}
                       <div className="flex justify-between items-center pt-1">
                         <span className="text-slate-500 text-[11px]">
                           {isCompleted 
                             ? '完了・獲得済' 
                             : isReadyToComplete 
-                              ? '14日達成！フィードバック提出可能' 
+                              ? '14日達成！提出可能' 
                               : `あと ${14 - days} 日間保持`}
                         </span>
                         {isCompleted ? (
@@ -830,7 +916,7 @@ export default function Home() {
                               setActiveCompletingTest(t);
                               setIsFeedbackModalOpen(true);
                             }}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition active:scale-95"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs transition active:scale-95"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
                             フィードバックを書いて100pt受取
@@ -843,120 +929,58 @@ export default function Home() {
                       </div>
                     </div>
                   );
-                })}
-              </div>
+                })
+              )}
             </div>
           )}
 
-          {/* 募集中の案件一覧 */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-bold text-slate-800 text-sm">募集中のテスト案件</h2>
-              <span className="text-xs text-slate-500 font-medium">{apps.length} 件</span>
-            </div>
-
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-2" />
-                <p className="text-sm">案件を読み込み中...</p>
-              </div>
-            ) : apps.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-500 p-6">
-                <p className="text-sm">現在募集中のテスト案件はありません。</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {apps.map((app) => {
-                  const progress = Math.min(
-                    100,
-                    Math.round((app.current_testers / app.required_testers) * 100)
-                  );
-                  const isJoined = myTests.some((t) => t.app_id === app.id);
-                  const isMyCreated = user && app.user_id === user.id;
-
-                  return (
-                    <div
-                      key={app.id}
-                      className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between"
-                    >
+          {/* ================= タブ3: あなたが募集中の案件 ================= */}
+          {activeTab === 'my_apps' && (
+            <div className="space-y-3 pt-1">
+              {myCreatedApps.length === 0 ? (
+                <div className="text-center py-10 bg-white rounded-xl border border-slate-200 text-slate-500 p-6">
+                  <p className="text-xs">あなたが募集中の案件はありません。</p>
+                  <button
+                    onClick={() => {
+                      if (!user) setIsAuthModalOpen(true);
+                      else setIsModalOpen(true);
+                    }}
+                    className="mt-3 text-xs bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg inline-block"
+                  >
+                    案件を新規募集する
+                  </button>
+                </div>
+              ) : (
+                myCreatedApps.map((app) => (
+                  <div key={app.id} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs space-y-2">
+                    <div className="flex items-center justify-between">
                       <div>
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <span className="inline-block text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full mb-1">
-                              {app.category}
-                            </span>
-                            <h3 className="font-bold text-slate-900 text-base">{app.name}</h3>
-                            <p className="text-xs text-slate-500 mt-0.5 font-medium">{app.developer}</p>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-100">
-                              +{app.reward_points} pt
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-1 mb-3">
-                          {app.tags?.map((tag, idx) => (
-                            <span key={idx} className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
-                              #{tag}
-                            </span>
-                          ))}
-                        </div>
+                        <h4 className="font-bold text-slate-900 text-sm">{app.name}</h4>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          テスター確保: <span className="font-semibold text-indigo-600">{app.current_testers}</span> / {app.required_testers} 人
+                        </p>
                       </div>
-
-                      <div>
-                        <div className="space-y-1 mb-3">
-                          <div className="flex justify-between text-xs text-slate-500 font-medium">
-                            <span className="flex items-center gap-1">
-                              <Users className="w-3.5 h-3.5 text-slate-400" />
-                              テスター確保状況
-                            </span>
-                            <span>
-                              {app.current_testers} / {app.required_testers} 人
-                            </span>
-                          </div>
-                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                            <div
-                              className="bg-indigo-600 h-full rounded-full transition-all duration-300"
-                              style={{ width: `${progress}%` }}
-                            />
-                          </div>
-                          <p className="text-[10px] text-slate-400">※ Google Play要件: 12人以上の14日維持（15人固定枠）</p>
-                        </div>
-
-                        <button
-                          onClick={() => handleJoinTest(app)}
-                          disabled={Boolean(isJoined || isMyCreated)}
-                          className={`w-full py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
-                            isMyCreated
-                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                              : isJoined
-                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                              : 'bg-slate-900 hover:bg-slate-800 text-white active:scale-[0.99]'
-                          }`}
-                        >
-                          {isMyCreated ? (
-                            <span>あなたが募集した案件です</span>
-                          ) : isJoined ? (
-                            <>
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                              <span>現在テスト参加中</span>
-                            </>
-                          ) : (
-                            <>
-                              <Calendar className="w-3.5 h-3.5 text-indigo-300" />
-                              <span>14日間のテストに参加する</span>
-                              <ExternalLink className="w-3 h-3 text-slate-400 ml-0.5" />
-                            </>
-                          )}
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => handleDeleteMyApp(app)}
+                        className="text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition"
+                        title="案件を取り下げて削除"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+
+                    <button
+                      onClick={() => handleCopyReviewText(app.id)}
+                      className="w-full py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>審査申請用フィードバックをコピー</span>
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -982,7 +1006,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* 新規登録時：必須Googleグループ参加案内＆チェック */}
             {isSignUp && (
               <div className="mb-4 bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-xl p-3.5 text-xs shadow-sm">
                 <p className="font-bold text-indigo-950 mb-1 flex items-center gap-1">
@@ -1002,7 +1025,6 @@ export default function Home() {
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
 
-                {/* 参加同意チェックボックス */}
                 <label className="flex items-start gap-2 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2 rounded-lg border border-indigo-100">
                   <input
                     type="checkbox"
@@ -1204,7 +1226,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* 案件募集モーダル（15人・1,500pt固定） */}
+      {/* 案件募集モーダル */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 shadow-xl max-h-[90vh] overflow-y-auto">
@@ -1220,7 +1242,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Google Play Console 設定リマインド */}
             <div className="mb-3 bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 text-xs text-indigo-950">
               <span className="font-bold block mb-1">⚠️ 案件投稿前の確認事項</span>
               Google Play Consoleのクローズドテストのテスター欄に、公式Googleグループのアドレスを追加してください：
