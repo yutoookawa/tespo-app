@@ -399,7 +399,11 @@ export default function Home() {
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeCompletingTest || !user) return;
-
+    
+if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
+      alert('「良かった点」と「改善してほしい点」はそれぞれ20文字以上入力してください。');
+      return;
+    }
     setFeedbackSubmitting(true);
     try {
       const { error } = await supabase
@@ -959,12 +963,19 @@ export default function Home() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">良かった点・UIの感想 <span className="text-red-500">*</span></label>
+         <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    良かった点・UIの感想 <span className="text-red-500">* (20文字以上)</span>
+                  </label>
+                  <span className={`text-[10px] font-bold ${goodPoints.trim().length >= 20 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {goodPoints.trim().length} / 20文字
+                  </span>
+                </div>
                 <textarea
                   required
                   rows={2}
-                  placeholder="操作感やデザインについて感じたこと"
+                  placeholder="直感的で操作がスムーズだった、デザインがシンプルで見やすかったなど"
                   value={goodPoints}
                   onChange={(e) => setGoodPoints(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
@@ -972,11 +983,18 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">改善してほしい点 <span className="text-red-500">*</span></label>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    改善してほしい点 <span className="text-red-500">* (20文字以上)</span>
+                  </label>
+                  <span className={`text-[10px] font-bold ${improvements.trim().length >= 20 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {improvements.trim().length} / 20文字
+                  </span>
+                </div>
                 <textarea
                   required
                   rows={2}
-                  placeholder="分かりにくかった部分やもっとこうしてほしい点"
+                  placeholder="文字のコントラストが低く見づらい画面があった、戻るボタンの挙動など"
                   value={improvements}
                   onChange={(e) => setImprovements(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
@@ -996,10 +1014,15 @@ export default function Home() {
               </div>
 
               <div className="pt-2">
+                {!(goodPoints.trim().length >= 20 && improvements.trim().length >= 20 && deviceModel.trim().length > 0) && (
+                  <p className="text-[11px] text-red-500 text-center mb-1.5 font-medium">
+                    ※使用端末名と、良かった点・改善点（各20文字以上）を入力してください
+                  </p>
+                )}
                 <button
                   type="submit"
-                  disabled={feedbackSubmitting}
-                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm transition shadow flex items-center justify-center gap-1.5"
+                  disabled={feedbackSubmitting || goodPoints.trim().length < 20 || improvements.trim().length < 20 || !deviceModel.trim()}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm transition shadow flex items-center justify-center gap-1.5 disabled:bg-slate-300 disabled:cursor-not-allowed"
                 >
                   {feedbackSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>提出して 100 pt を獲得</span>}
                 </button>
