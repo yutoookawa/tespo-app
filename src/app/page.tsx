@@ -26,7 +26,8 @@ import {
   Share2,
   Info,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  AlertTriangle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -318,7 +319,7 @@ export default function Home() {
       setTagsInput('');
       setTestUrl('');
       setIsModalOpen(false);
-      setActiveTab('my_apps'); // 投稿後、自動的に自作案件タブへ移動
+      setActiveTab('my_apps');
     } catch (err: any) {
       setFormError('投稿に失敗しました: ' + err.message);
     } finally {
@@ -617,7 +618,7 @@ export default function Home() {
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Xでサービスをシェア</span>
                 </button>
-                <p className="text-[10px] text-slate-400 text-center">Version 1.2.0</p>
+                <p className="text-[10px] text-slate-400 text-center">Version 1.2.1</p>
               </div>
             </div>
             <div className="flex-1" onClick={() => setIsMenuOpen(false)} />
@@ -625,27 +626,30 @@ export default function Home() {
         )}
 
         <div className="max-w-md mx-auto px-4 pt-3 space-y-3">
-          {/* コンパクト統合バー: ポイント残高 ＆ Googleグループ案内 */}
-          <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-xl px-3.5 py-2.5 text-white shadow-sm flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
+          {/* 保有ポイント ＆ 強調表示された公式Googleグループ参加ボタン */}
+          <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-xl px-3.5 py-2.5 text-white shadow-sm flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
               <span className="text-xs text-indigo-100">保有:</span>
               <span className="text-xl font-bold flex items-baseline gap-0.5">
                 {userPoints.toLocaleString()} <span className="text-[10px] font-normal text-indigo-200">pt</span>
               </span>
             </div>
+
+            {/* 強調版公式グループボタン */}
             <a
               href={GOOGLE_GROUP_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold px-2.5 py-1 rounded-full transition backdrop-blur-sm border border-white/20"
+              className="relative inline-flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-black px-3 py-1.5 rounded-lg shadow-md transition active:scale-95 border border-amber-200 animate-pulse"
+              title="参加しないとアプリをインストールできません"
             >
-              <Users className="w-3 h-3" />
-              <span>公式グループ参加</span>
-              <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-900 flex-shrink-0" />
+              <span>【必須】公式グループ参加</span>
+              <ExternalLink className="w-3 h-3 text-slate-700 flex-shrink-0 ml-0.5" />
             </a>
           </div>
 
-          {/* 開閉式使い方ガイド（場所を取らないアコーディオン） */}
+          {/* 開閉式使い方ガイド */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
             <button
               onClick={() => setIsGuideOpen(!isGuideOpen)}
@@ -675,7 +679,7 @@ export default function Home() {
             )}
           </div>
 
-          {/* 案件切り替えタブ（1タップで切り替え可能） */}
+          {/* 案件切り替えタブ */}
           <div className="flex bg-slate-200/80 p-1 rounded-xl text-xs font-bold text-slate-600">
             <button
               onClick={() => setActiveTab('explore')}
@@ -709,7 +713,7 @@ export default function Home() {
             </button>
           </div>
 
-          {/* ================= タブ1: 募集中のテスト案件（最優先・ファーストビュー直結） ================= */}
+          {/* タブ1: 募集中のテスト案件 */}
           {activeTab === 'explore' && (
             <div className="space-y-3 pt-1">
               {isLoading ? (
@@ -813,7 +817,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* ================= タブ2: 参加中のテスト（14日間維持） ================= */}
+          {/* タブ2: 参加中のテスト（14日間維持） */}
           {activeTab === 'joined' && (
             <div className="space-y-3 pt-1">
               {myTests.length === 0 ? (
@@ -934,7 +938,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* ================= タブ3: あなたが募集中の案件 ================= */}
+          {/* タブ3: あなたが募集中の案件 */}
           {activeTab === 'my_apps' && (
             <div className="space-y-3 pt-1">
               {myCreatedApps.length === 0 ? (
