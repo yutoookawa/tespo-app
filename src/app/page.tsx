@@ -20,7 +20,11 @@ import {
   LogIn,
   LogOut,
   Copy,
-  MessageSquare
+  MessageSquare,
+  Menu,
+  BookOpen,
+  Share2,
+  Info
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -58,11 +62,13 @@ interface Participation {
   app?: AppItem;
 }
 
-// 初期ポイントを0ptに変更（Xキャンペーン等で付与）
+const GOOGLE_GROUP_URL = "https://groups.google.com/g/testers-field";
+const GOOGLE_GROUP_EMAIL = "testers-field@googlegroups.com";
+
 const INITIAL_POINTS = 0;
 const FIXED_TESTERS = 15;
 const REWARD_PER_TEST = 100;
-const REQUIRED_POINTS_FOR_POST = FIXED_TESTERS * REWARD_PER_TEST; // 1,500pt
+const REQUIRED_POINTS_FOR_POST = FIXED_TESTERS * REWARD_PER_TEST;
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
@@ -73,10 +79,12 @@ export default function Home() {
   const [allParticipations, setAllParticipations] = useState<Participation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // モーダルステート
+  // モーダル・ドロワーステート
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [activeManualModal, setActiveManualModal] = useState<'about' | 'dev' | 'tester' | null>(null);
   const [activeCompletingTest, setActiveCompletingTest] = useState<Participation | null>(null);
   
   // 認証フォームステート
@@ -105,7 +113,6 @@ export default function Home() {
 
   const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
 
-  // ユーザー状態監視 & 初期読み込み
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -182,7 +189,6 @@ export default function Home() {
     }
   };
 
-  // 認証ハンドラー
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
@@ -209,15 +215,15 @@ export default function Home() {
           password: authPassword,
         });
         if (error) throw error;
-       if (data.user) {
-  await supabase.from('profiles').insert([{ 
-    id: data.user.id, 
-    email: data.user.email, 
-    username: authUsername.trim(),
-    points: INITIAL_POINTS 
-  }]);
-  alert('アカウント登録が完了しました！ログインしてご利用ください。');
-}
+        if (data.user) {
+          await supabase.from('profiles').insert([{ 
+            id: data.user.id, 
+            email: data.user.email, 
+            username: authUsername.trim(),
+            points: INITIAL_POINTS 
+          }]);
+          alert('アカウント登録が完了しました！ログインしてご利用ください。\n※続いて公式Googleグループへの参加もお忘れなく！');
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email: authEmail,
@@ -241,7 +247,6 @@ export default function Home() {
     setMyTests([]);
   };
 
-  // 案件新規作成（15人・1500pt固定）
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
@@ -308,7 +313,6 @@ export default function Home() {
     }
   };
 
-  // 自分の案件削除
   const handleDeleteMyApp = async (app: AppItem) => {
     if (!confirm(`「${app.name}」の募集を取り下げますか？\n未募集枠分のポイントが返還されます。`)) return;
 
@@ -332,7 +336,6 @@ export default function Home() {
     }
   };
 
-  // テスト参加
   const handleJoinTest = async (app: AppItem) => {
     if (!user) {
       setIsAuthModalOpen(true);
@@ -368,7 +371,6 @@ export default function Home() {
     }
   };
 
-  // スクショアップロード
   const handleScreenshotUpload = async (e: React.ChangeEvent<HTMLInputElement>, participationId: number, dayKey: 'day1' | 'day7' | 'day14') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -395,15 +397,15 @@ export default function Home() {
     }
   };
 
-  // フィードバック提出 & 完了ポイント受取
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeCompletingTest || !user) return;
-    
-if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
+
+    if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
       alert('「良かった点」と「改善してほしい点」はそれぞれ20文字以上入力してください。');
       return;
     }
+
     setFeedbackSubmitting(true);
     try {
       const { error } = await supabase
@@ -434,7 +436,6 @@ if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
     }
   };
 
-  // Google Play 審査用テキストのクリップボードコピー
   const handleCopyReviewText = (appId: number) => {
     const feedbacks = allParticipations.filter((p) => p.app_id === appId && p.status === 'completed');
     if (feedbacks.length === 0) {
@@ -459,6 +460,13 @@ if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
     alert('📋 Google Play Console 審査用のフィードバック回答テキストをコピーしました！');
   };
 
+  const handleShareApp = () => {
+    const shareText = "Google Playの「14日間・12人クローズドテスト」を個人開発者同士で助け合うWEBサービス【テスターズフィールド】！\n相互テストでポイントを貯めてテスターを即募集しよう！";
+    const shareUrl = "https://tespo-app.vercel.app";
+    const twitterIntent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}&hashtags=個人開発,GooglePlay,AndroidDev`;
+    window.open(twitterIntent, '_blank', 'noopener,noreferrer');
+  };
+
   const getDaysPassed = (startDate: string) => {
     const diff = new Date().getTime() - new Date(startDate).getTime();
     return Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -470,18 +478,25 @@ if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
     <main className="min-h-screen bg-slate-50 flex flex-col justify-between">
       <div>
         {/* ヘッダー */}
-        <header className="sticky top-0 z-10 bg-white border-b border-slate-200 px-4 py-3 shadow-sm">
+        <header className="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 py-3 shadow-sm">
           <div className="max-w-md mx-auto flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Smartphone className="w-6 h-6 text-indigo-600" />
-              <h1 className="text-lg font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
+              <button 
+                onClick={() => setIsMenuOpen(true)}
+                className="p-1 -ml-1 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition"
+                title="メニューを開く"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <Smartphone className="w-5 h-5 text-indigo-600" />
+              <h1 className="text-base font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
                 テスターズフィールド
               </h1>
             </div>
             <div className="flex items-center gap-2">
               {user ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-1 rounded-full border border-slate-200">
                     {username}
                   </span>
                   <button
@@ -518,6 +533,82 @@ if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
             </div>
           </div>
         </header>
+
+        {/* 左メニュー（スライドインドロワー） */}
+        {isMenuOpen && (
+          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex">
+            <div className="bg-white w-72 h-full shadow-2xl flex flex-col justify-between p-5 animate-in slide-in-from-left duration-200">
+              <div className="space-y-5">
+                <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="w-5 h-5 text-indigo-600" />
+                    <span className="font-bold text-slate-900 text-sm">テスターズフィールド</span>
+                  </div>
+                  <button onClick={() => setIsMenuOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* 統一Googleグループ参加推奨カード */}
+                <div className="bg-indigo-50/80 border border-indigo-100 rounded-xl p-3 text-xs">
+                  <p className="font-bold text-indigo-900 flex items-center gap-1 mb-1">
+                    <Users className="w-3.5 h-3.5 text-indigo-600" />
+                    公式Googleグループ
+                  </p>
+                  <p className="text-slate-600 text-[11px] leading-relaxed mb-2.5">
+                    参加すると全案件のテスト承認がワンタップで行えるようになります。
+                  </p>
+                  <a
+                    href={GOOGLE_GROUP_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-center py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs shadow transition"
+                  >
+                    グループに参加する（無料）
+                  </a>
+                </div>
+
+                {/* メニューナビゲーション */}
+                <div className="space-y-1 text-sm font-medium text-slate-700">
+                  <button
+                    onClick={() => { setIsMenuOpen(false); setActiveManualModal('about'); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 transition text-left"
+                  >
+                    <Info className="w-4 h-4 text-indigo-600" />
+                    <span>テスターズフィールドとは？</span>
+                  </button>
+                  <button
+                    onClick={() => { setIsMenuOpen(false); setActiveManualModal('dev'); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 transition text-left"
+                  >
+                    <BookOpen className="w-4 h-4 text-indigo-600" />
+                    <span>開発者向けマニュアル（募集）</span>
+                  </button>
+                  <button
+                    onClick={() => { setIsMenuOpen(false); setActiveManualModal('tester'); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 transition text-left"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                    <span>テスター向けマニュアル（参加）</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 下部シェアボタン */}
+              <div className="pt-4 border-t border-slate-100 space-y-2">
+                <button
+                  onClick={handleShareApp}
+                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Xでサービスをシェア</span>
+                </button>
+                <p className="text-[10px] text-slate-400 text-center">Version 1.1.0</p>
+              </div>
+            </div>
+            <div className="flex-1" onClick={() => setIsMenuOpen(false)} />
+          </div>
+        )}
 
         <div className="max-w-md mx-auto px-4 pt-4 space-y-5">
           {/* ポイント残高 */}
@@ -844,13 +935,35 @@ if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
       {/* ログイン・新規登録モーダル */}
       {isAuthModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-xl animate-in fade-in zoom-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-xl animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-bold text-slate-900 text-base">{isSignUp ? '新規登録' : 'ログイン'}</h3>
               <button onClick={() => setIsAuthModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* 新規登録時のみ公式Googleグループ参加案内を表示 */}
+            {isSignUp && (
+              <div className="mb-4 bg-indigo-50 border border-indigo-100 rounded-xl p-3 text-xs">
+                <p className="font-bold text-indigo-900 mb-1 flex items-center gap-1">
+                  <Users className="w-3.5 h-3.5 text-indigo-600" />
+                  【重要】登録前にグループ参加が必要です
+                </p>
+                <p className="text-slate-600 text-[11px] leading-relaxed mb-2">
+                  テスターズフィールド公式Googleグループに参加していないと、各アプリのインストール時にエラーになります。
+                </p>
+                <a
+                  href={GOOGLE_GROUP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs transition"
+                >
+                  <span>公式Googleグループに参加する</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            )}
 
             {authError && (
               <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
@@ -963,7 +1076,7 @@ if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
                 </div>
               </div>
 
-         <div>
+              <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className="block text-xs font-semibold text-slate-700">
                     良かった点・UIの感想 <span className="text-red-500">* (20文字以上)</span>
@@ -1048,6 +1161,25 @@ if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
               </button>
             </div>
 
+            {/* Google Play Console 設定リマインド */}
+            <div className="mb-3 bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 text-xs text-indigo-950">
+              <span className="font-bold block mb-1">⚠️ 案件投稿前の確認事項</span>
+              Google Play Consoleのクローズドテストのテスター欄に、公式Googleグループのアドレスを追加してください：
+              <div className="mt-1 flex items-center justify-between bg-white border border-indigo-200 rounded px-2 py-1 text-[11px] font-mono text-indigo-700">
+                <span>{GOOGLE_GROUP_EMAIL}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(GOOGLE_GROUP_EMAIL);
+                    alert('アドレスをコピーしました！Consoleのテスター欄に貼り付けてください。');
+                  }}
+                  className="font-sans text-indigo-600 font-bold hover:underline ml-2"
+                >
+                  コピー
+                </button>
+              </div>
+            </div>
+
             {formError && (
               <div className="mb-3 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 flex items-start gap-1.5">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -1096,19 +1228,19 @@ if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  テスト参加URL（GoogleグループまたはPlayストア） <span className="text-red-500">*</span>
+                  テスト参加オプトインURL（Web参加リンク） <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="url"
                   required
-                  placeholder="https://groups.google.com/... または https://play.google.com/..."
+                  placeholder="https://play.google.com/apps/testing/パッケージ名"
                   value={testUrl}
                   onChange={(e) => setTestUrl(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">※ Consoleでテスターを追加した後に発行されるWeb参加URLです。</p>
               </div>
 
-              {/* 固定設定の案内枠 */}
               <div className="bg-indigo-50/70 border border-indigo-100 rounded-lg p-3 text-xs text-indigo-900 space-y-1">
                 <div className="flex justify-between font-semibold">
                   <span>募集テスター人数:</span>
@@ -1144,6 +1276,83 @@ if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* マニュアル・紹介モーダル */}
+      {activeManualModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl p-5 shadow-xl max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-base">
+                {activeManualModal === 'about' && 'テスターズフィールドとは？'}
+                {activeManualModal === 'dev' && '開発者向けマニュアル（募集手順）'}
+                {activeManualModal === 'tester' && 'テスター向けマニュアル（参加手順）'}
+              </h3>
+              <button onClick={() => setActiveManualModal(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {activeManualModal === 'about' && (
+              <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">サービス立ち上げの背景</h4>
+                  <p>Google Playでは個人開発者がアプリを本番公開する際、「12人以上のテスターが14日間連続でオプトイン（参加）を維持すること」が必須条件となりました。知り合いだけで12人を集めるのは非常にハードルが高く、挫折してしまう開発者が後を絶ちません。</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">仕組みと特徴</h4>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li><strong>相互扶助のエコシステム</strong>: 他の開発者のアプリをテストすることでポイント（1回100pt）を獲得できます。</li>
+                    <li><strong>完全無料</strong>: 貯まった1,500ptで、今度は自分のアプリのテスター15名を募集できます。</li>
+                    <li><strong>審査用フィードバック生成</strong>: 14日完遂時のテスターの意見を、Google Play Consoleの審査申請フォームにそのままコピペできる形で自動出力します。</li>
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {activeManualModal === 'dev' && (
+              <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">STEP 1: Google Play Console にグループを追加</h4>
+                  <p>Play Console の「クローズドテスト」&gt;「テスター」タブを開き、メールアドレス一覧に公式Googleグループのアドレス（<strong className="text-indigo-600">{GOOGLE_GROUP_EMAIL}</strong>）を追加して保存します。</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">STEP 2: Web参加リンクを取得</h4>
+                  <p>「テスターへの参加案内方法」にある「ウェブ上のテスター向けリンク（<code>https://play.google.com/apps/testing/...</code>）」をコピーします。</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">STEP 3: 案件を募集</h4>
+                  <p>ヘッダーの「募集」ボタンを押し、先ほどのWeb参加リンクを貼り付けて投稿します（1,500pt消費）。</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">STEP 4: 14日後に審査申請</h4>
+                  <p>テスターが14日間維持して集まったフィードバックをワンクリックでコピーし、Consoleの審査申請フォームに貼り付けて本番公開を申請します。</p>
+                </div>
+              </div>
+            )}
+
+            {activeManualModal === 'tester' && (
+              <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">STEP 1: 公式Googleグループに参加</h4>
+                  <p>最初に公式Googleグループ（参加無料）に加入します。一度入れば、以後はすべてのアプリをワンクリックでテスト可能になります。</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">STEP 2: 案件に参加＆承認</h4>
+                  <p>一覧から気になるアプリの「テストに参加する」を押し、開いたGoogle Play画面で青い「テスターになる」ボタンを押してからアプリをインストールします。</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">STEP 3: 14日間アプリを維持</h4>
+                  <p>アプリをアンインストールせずに14日間端末に維持します。1日目・7日目・14日目に簡単な起動スクショを提出します。</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">STEP 4: フィードバック回答で100pt獲得</h4>
+                  <p>14日経過後、「フィードバックを書いて100pt受取」から感想を入力するとポイントが付与されます。</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
