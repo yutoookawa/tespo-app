@@ -625,7 +625,7 @@ export default function Home() {
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Xでサービスをシェア</span>
                 </button>
-                <p className="text-[10px] text-slate-400 text-center">Version 1.2.2</p>
+                <p className="text-[10px] text-slate-400 text-center">Version 1.2.3</p>
               </div>
             </div>
             <div className="flex-1" onClick={() => setIsMenuOpen(false)} />
@@ -633,7 +633,7 @@ export default function Home() {
         )}
 
         <div className="max-w-md mx-auto px-4 pt-3 space-y-3">
-          {/* 保有ポイント ＆ 見やすいトーンの公式Googleグループ参加ボタン */}
+          {/* 保有ポイント ＆ 公式Googleグループ参加ボタン */}
           <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-xl px-3.5 py-2.5 text-white shadow-sm flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="text-xs text-indigo-100">保有:</span>
@@ -993,12 +993,26 @@ export default function Home() {
       </div>
 
       {/* フッター */}
-      <footer className="mt-12 border-t border-slate-200 py-6 text-center text-xs text-slate-400">
+      <footer className="mt-12 border-t border-slate-200 py-6 text-center text-xs text-slate-400 space-y-2">
         <p>© テスターズフィールド (Testers Field) - 個人開発者のGoogle Playクローズドテスト相互プラットフォーム</p>
-        <p className="text-[10px] text-slate-400 mt-1">Google Play および Android は Google LLC の商標です。当サービスは Google LLC と提携・公認されたものではありません。</p>
-        <div className="mt-2 flex justify-center gap-4 text-indigo-600">
+        <p className="text-[10px] text-slate-400">Google Play および Android は Google LLC の商標です。当サービスは Google LLC と提携・公認されたものではありません。</p>
+        <div className="flex justify-center items-center gap-4 text-xs text-indigo-600 pt-1">
+          <button 
+            onClick={() => setActiveManualModal('terms')}
+            className="hover:underline text-slate-500 font-medium"
+          >
+            利用規約
+          </button>
+          <span>•</span>
+          <button 
+            onClick={() => setActiveManualModal('about')}
+            className="hover:underline text-slate-500 font-medium"
+          >
+            サービス概要
+          </button>
+          <span>•</span>
           <a href="https://forms.gle/3sTTB61MrBeghMTd6" target="_blank" rel="noopener noreferrer" className="hover:underline">
-            不具合・違反案件の報告フォーム
+            不具合・違反報告
           </a>
         </div>
       </footer>
@@ -1093,6 +1107,20 @@ export default function Home() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                 />
               </div>
+
+              {isSignUp && (
+                <p className="text-[11px] text-slate-500 text-center leading-relaxed">
+                  登録ボタンを押すことで、
+                  <button
+                    type="button"
+                    onClick={() => setActiveManualModal('terms')}
+                    className="text-indigo-600 hover:underline font-semibold"
+                  >
+                    利用規約
+                  </button>
+                  に同意したものとみなします。
+                </p>
+              )}
 
               {isSignUp && !hasJoinedGroup && (
                 <p className="text-[11px] text-red-500 text-center font-medium">
