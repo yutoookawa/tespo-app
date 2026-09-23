@@ -86,6 +86,8 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'explore' | 'joined' | 'my_apps'>('explore');
   // 使い方アコーディオン開閉
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  // グループ参加済み状態のローカル保持
+  const [isGroupJoinedState, setIsGroupJoinedState] = useState(false);
   
   // モーダル・ドロワーステート
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -123,6 +125,11 @@ export default function Home() {
   const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
 
   useEffect(() => {
+    const storedGroupJoined = localStorage.getItem('tf_group_joined');
+    if (storedGroupJoined === 'true') {
+      setIsGroupJoinedState(true);
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -198,6 +205,11 @@ export default function Home() {
     }
   };
 
+  const markGroupAsJoined = () => {
+    setIsGroupJoinedState(true);
+    localStorage.setItem('tf_group_joined', 'true');
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
@@ -235,6 +247,7 @@ export default function Home() {
             username: authUsername.trim(),
             points: INITIAL_POINTS 
           }]);
+          markGroupAsJoined();
           alert('アカウント登録が完了しました！ログインしてご利用ください。');
         }
       } else {
@@ -572,13 +585,17 @@ export default function Home() {
                     <Users className="w-4 h-4 text-indigo-600" />
                     公式Googleグループ（参加必須）
                   </p>
-                  <p className="text-slate-500 text-[11px] leading-relaxed mb-3">
+                  <p className="text-slate-500 text-[11px] leading-relaxed mb-2">
                     参加しないとPlayストアで「アイテムが見つかりません」とエラーになります。
+                  </p>
+                  <p className="text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200 font-semibold mb-3">
+                    ⚠️ Android実機（Google Play）と同じGoogleアカウントでご参加ください。
                   </p>
                   <a
                     href={GOOGLE_GROUP_URL}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={markGroupAsJoined}
                     className="block text-center py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow-xs transition"
                   >
                     グループに参加する（無料）
@@ -625,7 +642,7 @@ export default function Home() {
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Xでサービスをシェア</span>
                 </button>
-                <p className="text-[10px] text-slate-400 text-center">Version 1.2.3</p>
+                <p className="text-[10px] text-slate-400 text-center">Version 1.2.5</p>
               </div>
             </div>
             <div className="flex-1" onClick={() => setIsMenuOpen(false)} />
@@ -633,7 +650,7 @@ export default function Home() {
         )}
 
         <div className="max-w-md mx-auto px-4 pt-3 space-y-3">
-          {/* 保有ポイント ＆ 公式Googleグループ参加ボタン */}
+          {/* 保有ポイント ＆ 参加状態ボタン */}
           <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-xl px-3.5 py-2.5 text-white shadow-sm flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="text-xs text-indigo-100">保有:</span>
@@ -642,16 +659,41 @@ export default function Home() {
               </span>
             </div>
 
-            <a
-              href={GOOGLE_GROUP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 bg-white text-indigo-700 hover:bg-indigo-50 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition active:scale-95 border border-indigo-100"
-            >
-              <span>【必須！】公式グループ参加</span>
-              <ExternalLink className="w-3 h-3 text-indigo-500 ml-0.5" />
-            </a>
+            {isGroupJoinedState ? (
+              <a
+                href={GOOGLE_GROUP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition backdrop-blur-sm border border-white/20"
+                title="公式Googleグループ（参加済）"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                <span>グループ参加済 ✓</span>
+              </a>
+            ) : (
+              <a
+                href={GOOGLE_GROUP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={markGroupAsJoined}
+                className="inline-flex items-center gap-1 bg-white text-indigo-700 hover:bg-indigo-50 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition active:scale-95 border border-indigo-100"
+              >
+                <span>【必須！】公式グループ参加</span>
+                <ExternalLink className="w-3 h-3 text-indigo-500 ml-0.5" />
+              </a>
+            )}
           </div>
+
+          {/* 未参加ユーザー向けのアカウント一致注意バー */}
+          {!isGroupJoinedState && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[11px] text-amber-900 flex items-start gap-1.5">
+              <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <span>
+                <strong>アカウント確認のお願い：</strong><br />
+                Googleグループには、必ず<strong>スマホのGoogle Play（Playストア）と同じGoogleアカウント</strong>でご参加ください（別アカウントだとアプリをインストールできません）。
+              </span>
+            </div>
+          )}
 
           {/* 開閉式使い方ガイド */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
@@ -727,7 +769,19 @@ export default function Home() {
                 </div>
               ) : apps.length === 0 ? (
                 <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-500 p-6">
-                  <p className="text-sm">現在募集中のテスト案件はありません。</p>
+                  <Smartphone className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm font-bold text-slate-700 mb-1">現在募集中のテスト案件はありません</p>
+                  <p className="text-xs text-slate-400 mb-4">右上の「募集」ボタンから、あなたのアプリを一番乗りで募集してみましょう！</p>
+                  <button
+                    onClick={() => {
+                      if (!user) setIsAuthModalOpen(true);
+                      else setIsModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow-xs"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" />
+                    <span>アプリを募集する</span>
+                  </button>
                 </div>
               ) : (
                 apps.map((app) => {
@@ -1034,13 +1088,17 @@ export default function Home() {
                   <Users className="w-4 h-4 text-indigo-600" />
                   STEP 1: 公式Googleグループへの参加（必須）
                 </p>
-                <p className="text-slate-500 text-[11px] leading-relaxed mb-2.5">
+                <p className="text-slate-500 text-[11px] leading-relaxed mb-1.5">
                   未参加の場合、アプリのインストール時に「アイテムが見つかりませんでした」とエラーになります。
+                </p>
+                <p className="text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200 font-semibold mb-2.5">
+                  ⚠️ 必ず【Android実機（Playストア）と同じGoogleアカウント】で参加してください。
                 </p>
                 <a
                   href={GOOGLE_GROUP_URL}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={markGroupAsJoined}
                   className="flex items-center justify-center gap-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-xs transition mb-3"
                 >
                   <span>公式Googleグループに参加する（無料）</span>
@@ -1419,11 +1477,11 @@ export default function Home() {
                   <p>Google Playでは個人開発者がアプリを本番公開する際、「12人以上のテスターが14日間連続でオプトイン（参加）を維持すること」が必須条件となりました。知り合いだけで12人を集めるのは非常にハードルが高く、挫折してしまう開発者が後を絶ちません。</p>
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-900 text-sm mb-1">仕組みと特徴</h4>
+                  <h4 className="font-bold text-slate-900 text-sm mb-1">DiscordやSNS募集との違い</h4>
                   <ul className="list-disc list-inside space-y-1">
-                    <li><strong>相互扶助のエコシステム</strong>: 他の開発者のアプリをテストすることでポイント（1回100pt）を獲得できます。</li>
-                    <li><strong>完全無料</strong>: 貯まった1,500ptで、今度は自分のアプリのテスター15名を募集できます。</li>
-                    <li><strong>審査用フィードバック生成</strong>: 14日完遂時のテスターの意見を、Google Play Consoleの審査申請フォームにそのままコピペできる形で自動出力します。</li>
+                    <li><strong>管理ストレスゼロ</strong>: 14日間の維持カウントやスクショ確認、ポイント付与をシステムが自動管理。手動でお礼や管理をする必要がありません。</li>
+                    <li><strong>審査通過に直結する高品質レビュー</strong>: 20文字以上の具体的な意見を強制し、Google Play Consoleの審査申請フォームにコピペできる形で出力します。</li>
+                    <li><strong>完全無料のエコシステム</strong>: 他の開発者のアプリをテストして貯めたポイントで、自分のアプリのテスター15名を即座に募集できます。</li>
                   </ul>
                 </div>
               </div>
@@ -1454,7 +1512,7 @@ export default function Home() {
               <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
                 <div>
                   <h4 className="font-bold text-slate-900 text-sm mb-1">STEP 1: 公式Googleグループに参加</h4>
-                  <p>最初に公式Googleグループ（参加無料）に加入します。一度入れば、以後はすべてのアプリをワンクリックでテスト可能になります。</p>
+                  <p>最初に公式Googleグループ（参加無料）に加入します。必ず<strong>Android実機のPlayストアと同じGoogleアカウント</strong>で参加してください。</p>
                 </div>
                 <div>
                   <h4 className="font-bold text-slate-900 text-sm mb-1">STEP 2: 案件に参加＆承認</h4>
