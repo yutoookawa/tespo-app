@@ -68,10 +68,25 @@ interface Participation {
 const GOOGLE_GROUP_URL = "https://groups.google.com/g/testers-field";
 const GOOGLE_GROUP_EMAIL = "testers-field@googlegroups.com";
 
-const INITIAL_POINTS = 0;
+// 新規登録時の初期ポイント（初回募集1回分）
+const INITIAL_POINTS = 1500;
 const FIXED_TESTERS = 15;
 const REWARD_PER_TEST = 100;
 const REQUIRED_POINTS_FOR_POST = FIXED_TESTERS * REWARD_PER_TEST;
+
+// 0件時に表示する公式チュートリアル案件
+const DEMO_SAMPLE_APP: AppItem = {
+  id: -999,
+  name: "【公式サンプル】タスク管理メモ",
+  category: "ツール",
+  developer: "テスターズフィールド運営",
+  required_testers: 15,
+  current_testers: 12,
+  reward_points: 100,
+  tags: ["サンプル", "操作体験", "14日間維持"],
+  test_url: GOOGLE_GROUP_URL,
+  created_at: new Date().toISOString(),
+};
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
@@ -84,12 +99,10 @@ export default function Home() {
 
   // 表示タブ管理 ('explore' = 募集中, 'joined' = 参加中, 'my_apps' = 自作案件)
   const [activeTab, setActiveTab] = useState<'explore' | 'joined' | 'my_apps'>('explore');
-  // 使い方アコーディオン開閉
   const [isGuideOpen, setIsGuideOpen] = useState(false);
-  // グループ参加済み状態のローカル保持
   const [isGroupJoinedState, setIsGroupJoinedState] = useState(false);
   
-  // モーダル・ドロワーステート
+  // モーダルステート
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
@@ -101,7 +114,7 @@ export default function Home() {
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authUsername, setAuthUsername] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(true); // 初回来訪者が多い時期はデフォルトで新規登録を案内
   const [hasJoinedGroup, setHasJoinedGroup] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
@@ -241,6 +254,7 @@ export default function Home() {
         });
         if (error) throw error;
         if (data.user) {
+          // 初期付与ポイント 1,500 pt をセット
           await supabase.from('profiles').insert([{ 
             id: data.user.id, 
             email: data.user.email, 
@@ -248,7 +262,7 @@ export default function Home() {
             points: INITIAL_POINTS 
           }]);
           markGroupAsJoined();
-          alert('アカウント登録が完了しました！ログインしてご利用ください。');
+          alert('🎉 登録完了しました！初回募集用の 1,500 pt をプレゼントしました！');
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -364,6 +378,13 @@ export default function Home() {
   };
 
   const handleJoinTest = async (app: AppItem) => {
+    if (app.id === -999) {
+      alert('💡 これは操作体験用の公式サンプル案件です。\n実際の案件に参加すると、14日間のオプトイン維持とスクショ提出、フィードバック送信で100ptを獲得できます！');
+      window.open(GOOGLE_GROUP_URL, '_blank', 'noopener,noreferrer');
+      markGroupAsJoined();
+      return;
+    }
+
     if (!user) {
       setIsAuthModalOpen(true);
       return;
@@ -500,6 +521,8 @@ export default function Home() {
   };
 
   const myCreatedApps = user ? apps.filter((a) => a.user_id === user.id) : [];
+  // 案件が0件の場合は公式サンプル案件を表示
+  const displayedApps = apps.length > 0 ? apps : [DEMO_SAMPLE_APP];
 
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col justify-between">
@@ -537,20 +560,20 @@ export default function Home() {
               ) : (
                 <button
                   onClick={() => {
-                    setIsSignUp(false);
+                    setIsSignUp(true);
                     setIsAuthModalOpen(true);
                   }}
                   className="text-xs text-indigo-600 hover:bg-indigo-50 flex items-center gap-1 border border-indigo-200 px-2.5 py-1.5 rounded-full font-semibold"
                 >
                   <LogIn className="w-3.5 h-3.5" />
-                  <span>ログイン</span>
+                  <span>登録 / ログイン</span>
                 </button>
               )}
               <button
                 onClick={() => {
                   setFormError('');
                   if (!user) {
-                    setIsSignUp(false);
+                    setIsSignUp(true);
                     setIsAuthModalOpen(true);
                   } else {
                     setIsModalOpen(true);
@@ -565,7 +588,7 @@ export default function Home() {
           </div>
         </header>
 
-        {/* 左メニュー（スライドインドロワー） */}
+        {/* 左メニュー */}
         {isMenuOpen && (
           <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex">
             <div className="bg-white w-72 h-full shadow-2xl flex flex-col justify-between p-5 animate-in slide-in-from-left duration-200">
@@ -589,7 +612,7 @@ export default function Home() {
                     参加しないとPlayストアで「アイテムが見つかりません」とエラーになります。
                   </p>
                   <p className="text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200 font-semibold mb-3">
-                    ⚠️ Android実機（Google Play）と同じGoogleアカウントでご参加ください。
+                    ⚠️ Android実機（Playストア）と同じGoogleアカウントでご参加ください。
                   </p>
                   <a
                     href={GOOGLE_GROUP_URL}
@@ -642,7 +665,7 @@ export default function Home() {
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Xでサービスをシェア</span>
                 </button>
-                <p className="text-[10px] text-slate-400 text-center">Version 1.2.5</p>
+                <p className="text-[10px] text-slate-400 text-center">Version 1.2.6</p>
               </div>
             </div>
             <div className="flex-1" onClick={() => setIsMenuOpen(false)} />
@@ -650,7 +673,7 @@ export default function Home() {
         )}
 
         <div className="max-w-md mx-auto px-4 pt-3 space-y-3">
-          {/* 保有ポイント ＆ 参加状態ボタン */}
+          {/* 保有ポイント ＆ 参加ボタン */}
           <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-xl px-3.5 py-2.5 text-white shadow-sm flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="text-xs text-indigo-100">保有:</span>
@@ -690,7 +713,7 @@ export default function Home() {
               <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
               <span>
                 <strong>アカウント確認のお願い：</strong><br />
-                Googleグループには、必ず<strong>スマホのGoogle Play（Playストア）と同じGoogleアカウント</strong>でご参加ください（別アカウントだとアプリをインストールできません）。
+                Googleグループには、必ず<strong>スマホのGoogle Play（Playストア）と同じGoogleアカウント</strong>でご参加ください。
               </span>
             </div>
           )}
@@ -717,9 +740,9 @@ export default function Home() {
                 </p>
                 <ol className="list-decimal list-inside space-y-1 text-slate-600 pl-0.5 leading-normal">
                   <li><strong>公式Googleグループに参加</strong>（未参加だとインストール不可）</li>
-                  <li>気になるアプリのテストに参加し、<strong>14日間維持</strong>（1・7・14日目にスクショ提出）</li>
+                  <li>貯めたポイント（1,500pt）で<strong>自分のアプリのテスター15人を即募集</strong>！</li>
+                  <li>他のアプリのテストに参加して<strong>14日間維持</strong>（1・7・14日目にスクショ提出）</li>
                   <li>14日経過後に<strong>フィードバック記入で 100 pt 獲得</strong></li>
-                  <li>貯めたポイント（1,500pt）で<strong>自分のアプリのテスター15人を募集</strong>！</li>
                 </ol>
               </div>
             )}
@@ -735,7 +758,7 @@ export default function Home() {
                   : 'hover:text-slate-900'
               }`}
             >
-              募集中 ({apps.length})
+              募集中 ({displayedApps.length})
             </button>
             <button
               onClick={() => setActiveTab('joined')}
@@ -767,24 +790,9 @@ export default function Home() {
                   <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-2" />
                   <p className="text-sm">案件を読み込み中...</p>
                 </div>
-              ) : apps.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-500 p-6">
-                  <Smartphone className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm font-bold text-slate-700 mb-1">現在募集中のテスト案件はありません</p>
-                  <p className="text-xs text-slate-400 mb-4">右上の「募集」ボタンから、あなたのアプリを一番乗りで募集してみましょう！</p>
-                  <button
-                    onClick={() => {
-                      if (!user) setIsAuthModalOpen(true);
-                      else setIsModalOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow-xs"
-                  >
-                    <PlusCircle className="w-3.5 h-3.5" />
-                    <span>アプリを募集する</span>
-                  </button>
-                </div>
               ) : (
-                apps.map((app) => {
+                displayedApps.map((app) => {
+                  const isDemo = app.id === -999;
                   const progress = Math.min(
                     100,
                     Math.round((app.current_testers / app.required_testers) * 100)
@@ -795,13 +803,17 @@ export default function Home() {
                   return (
                     <div
                       key={app.id}
-                      className="bg-white rounded-xl p-4 border border-slate-200 shadow-xs flex flex-col justify-between"
+                      className={`bg-white rounded-xl p-4 border shadow-xs flex flex-col justify-between ${
+                        isDemo ? 'border-indigo-300 ring-1 ring-indigo-200' : 'border-slate-200'
+                      }`}
                     >
                       <div>
                         <div className="flex justify-between items-start mb-1.5">
                           <div>
-                            <span className="inline-block text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full mb-1">
-                              {app.category}
+                            <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full mb-1 ${
+                              isDemo ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600'
+                            }`}>
+                              {isDemo ? '公式チュートリアル' : app.category}
                             </span>
                             <h3 className="font-bold text-slate-900 text-base">{app.name}</h3>
                             <p className="text-xs text-slate-500 mt-0.5 font-medium">{app.developer}</p>
@@ -843,16 +855,23 @@ export default function Home() {
 
                         <button
                           onClick={() => handleJoinTest(app)}
-                          disabled={Boolean(isJoined || isMyCreated)}
+                          disabled={Boolean(!isDemo && (isJoined || isMyCreated))}
                           className={`w-full py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
-                            isMyCreated
+                            isDemo
+                              ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm active:scale-[0.99]'
+                              : isMyCreated
                               ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                               : isJoined
                               ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                               : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm active:scale-[0.99]'
                           }`}
                         >
-                          {isMyCreated ? (
+                          {isDemo ? (
+                            <>
+                              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                              <span>操作体験・参加方法を確認する</span>
+                            </>
+                          ) : isMyCreated ? (
                             <span>あなたが募集した案件です</span>
                           ) : isJoined ? (
                             <>
@@ -875,7 +894,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* タブ2: 参加中のテスト（14日間維持） */}
+          {/* タブ2: 参加中のテスト */}
           {activeTab === 'joined' && (
             <div className="space-y-3 pt-1">
               {myTests.length === 0 ? (
@@ -1004,8 +1023,12 @@ export default function Home() {
                   <p className="text-xs">あなたが募集中の案件はありません。</p>
                   <button
                     onClick={() => {
-                      if (!user) setIsAuthModalOpen(true);
-                      else setIsModalOpen(true);
+                      if (!user) {
+                        setIsSignUp(true);
+                        setIsAuthModalOpen(true);
+                      } else {
+                        setIsModalOpen(true);
+                      }
                     }}
                     className="mt-3 text-xs bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg inline-block"
                   >
@@ -1076,7 +1099,14 @@ export default function Home() {
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-xl animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-slate-900 text-base">{isSignUp ? '新規登録' : 'ログイン'}</h3>
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">{isSignUp ? '新規登録' : 'ログイン'}</h3>
+                {isSignUp && (
+                  <p className="text-[11px] text-indigo-600 font-bold mt-0.5">
+                    🎁 新規登録で初回募集用 1,500 pt プレゼント中！
+                  </p>
+                )}
+              </div>
               <button onClick={() => setIsAuthModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
@@ -1092,7 +1122,7 @@ export default function Home() {
                   未参加の場合、アプリのインストール時に「アイテムが見つかりませんでした」とエラーになります。
                 </p>
                 <p className="text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200 font-semibold mb-2.5">
-                  ⚠️ 必ず【Android実機（Playストア）と同じGoogleアカウント】で参加してください。
+                  ⚠️ 必ず【Android実機（Playストア）と同じGoogleアカウント】でご参加ください。
                 </p>
                 <a
                   href={GOOGLE_GROUP_URL}
@@ -1191,7 +1221,7 @@ export default function Home() {
                 disabled={authLoading || (isSignUp && !hasJoinedGroup)}
                 className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm transition shadow-xs disabled:bg-slate-300 disabled:cursor-not-allowed"
               >
-                {authLoading ? '処理中...' : isSignUp ? '登録案内メールを送信' : 'ログイン'}
+                {authLoading ? '処理中...' : isSignUp ? '1,500ptを受け取って登録' : 'ログイン'}
               </button>
             </form>
 
