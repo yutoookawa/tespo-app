@@ -26,12 +26,13 @@ import {
   ChevronUp,
   FileText,
   Activity,
-  Award
+  Award,
+  Save
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 
-// --- Web Audio API（サスペンド自動復帰 ＆ 音量・ぷよん音追加） ---
+// --- Web Audio API（YouTube/ゲーム標準音量にブースト） ---
 const playHapticSound = async (type: 'click' | 'success' | 'tab' | 'slime' = 'click') => {
   if (typeof window === 'undefined') return;
   try {
@@ -39,7 +40,6 @@ const playHapticSound = async (type: 'click' | 'success' | 'tab' | 'slime' = 'cl
     if (!AudioContextClass) return;
     const ctx = new AudioContextClass();
 
-    // ブラウザの省電力スリープ復帰
     if (ctx.state === 'suspended') {
       await ctx.resume();
     }
@@ -52,42 +52,42 @@ const playHapticSound = async (type: 'click' | 'success' | 'tab' | 'slime' = 'cl
     const now = ctx.currentTime;
 
     if (type === 'slime') {
-      // ぷよん！という弾力スライム音
+      // ぷよん！という弾力スライム音（音量強化）
       osc.type = 'sine';
       osc.frequency.setValueAtTime(320, now);
       osc.frequency.exponentialRampToValueAtTime(780, now + 0.08);
       osc.frequency.exponentialRampToValueAtTime(450, now + 0.16);
-      gain.gain.setValueAtTime(0.4, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      gain.gain.setValueAtTime(0.65, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
       osc.start(now);
-      osc.stop(now + 0.18);
+      osc.stop(now + 0.2);
     } else if (type === 'click') {
-      // 乾いた心地よいクリック（音量0.38にブースト）
+      // YouTube/Netflix操作音に近いしっかりしたクリック音
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(900, now);
-      osc.frequency.exponentialRampToValueAtTime(300, now + 0.04);
-      gain.gain.setValueAtTime(0.38, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-      osc.start(now);
-      osc.stop(now + 0.04);
-    } else if (type === 'tab') {
-      // タブ切り替えのスナップ音
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(550, now);
-      osc.frequency.exponentialRampToValueAtTime(850, now + 0.05);
-      gain.gain.setValueAtTime(0.28, now);
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(260, now + 0.05);
+      gain.gain.setValueAtTime(0.6, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
       osc.start(now);
       osc.stop(now + 0.05);
+    } else if (type === 'tab') {
+      // タブ切り替え音
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(780, now + 0.06);
+      gain.gain.setValueAtTime(0.45, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      osc.start(now);
+      osc.stop(now + 0.06);
     } else if (type === 'success') {
-      // 承認・受取時のチャイム
+      // 承認・受取時のリッチチャイム
       osc.type = 'sine';
       osc.frequency.setValueAtTime(523.25, now);
       osc.frequency.setValueAtTime(659.25, now + 0.08);
-      gain.gain.setValueAtTime(0.38, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+      gain.gain.setValueAtTime(0.55, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
       osc.start(now);
-      osc.stop(now + 0.24);
+      osc.stop(now + 0.26);
     }
   } catch (e) {
     // AudioContext制限対策
@@ -115,15 +115,12 @@ interface Participation {
   tester_name: string;
   started_at: string;
   status: 'testing' | 'completed' | 'dropped';
-  feedback?: string;
   device_model?: string;
   os_version?: string;
   good_points?: string;
   improvements?: string;
   bug_reports?: string;
   screenshot_day1?: string;
-  screenshot_day7?: string;
-  screenshot_day14?: string;
   app?: AppItem;
 }
 
@@ -168,7 +165,7 @@ export default function Home() {
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeManualModal, setActiveManualModal] = useState<'about' | 'dev' | 'tester' | 'terms' | null>(null);
-  const [activeCompletingTest, setActiveCompletingTest] = useState<Participation | null>(null);
+  const [activeEditingTest, setActiveEditingTest] = useState<Participation | null>(null);
   
   // 認証フォーム
   const [authEmail, setAuthEmail] = useState('');
@@ -187,7 +184,7 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
-  // レビュー提出フォーム
+  // レビュー下書き・編集フォーム（初日から随時編集可能）
   const [deviceModel, setDeviceModel] = useState('');
   const [osVersion, setOsVersion] = useState('Android 14');
   const [goodPoints, setGoodPoints] = useState('');
@@ -195,7 +192,7 @@ export default function Home() {
   const [bugReports, setBugReports] = useState('');
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
 
-  const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
+  const [uploadingTarget, setUploadingTarget] = useState<number | null>(null);
 
   useEffect(() => {
     const storedGroupJoined = localStorage.getItem('tf_group_joined');
@@ -247,6 +244,11 @@ export default function Home() {
     }
   };
 
+  const getDaysPassed = (startDate: string) => {
+    const diff = new Date().getTime() - new Date(startDate).getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24));
+  };
+
   const fetchData = async () => {
     try {
       const { data: appsData, error: appsErr } = await supabase
@@ -265,8 +267,27 @@ export default function Home() {
 
       const { data: sessionData } = await supabase.auth.getSession();
       const currentUserId = sessionData.session?.user?.id;
+      
       if (currentUserId && partData) {
-        setMyTests(partData.filter((p) => p.user_id === currentUserId));
+        const userParticipations = partData.filter((p) => p.user_id === currentUserId);
+        setMyTests(userParticipations);
+
+        // 14日経過した案件の自動完了チェック（14日経過＋スクショ＋20文字以上入力で自動完了）
+        userParticipations.forEach(async (p) => {
+          if (p.status === 'testing' && getDaysPassed(p.started_at) >= 14) {
+            const hasScreenshot = Boolean(p.screenshot_day1);
+            const hasValidReview = (p.good_points?.length || 0) >= 20 && (p.improvements?.length || 0) >= 20;
+
+            if (hasScreenshot && hasValidReview) {
+              await supabase.from('test_participations').update({ status: 'completed' }).eq('id', p.id);
+              const nextPoints = userPoints + REWARD_PER_TEST;
+              await supabase.from('profiles').update({ points: nextPoints }).eq('id', currentUserId);
+              setUserPoints(nextPoints);
+              setMyTests(prev => prev.map(item => item.id === p.id ? { ...item, status: 'completed' } : item));
+            }
+          }
+        });
+
       } else {
         const localJoined = JSON.parse(localStorage.getItem('tespo_joined_ids') || '[]');
         setMyTests((partData || []).filter((p) => localJoined.includes(p.id)));
@@ -284,7 +305,6 @@ export default function Home() {
     localStorage.setItem('tf_group_joined', 'true');
   };
 
-  // スライム（テスポ）をタップしたときのアクション
   const handleSlimeClick = () => {
     playHapticSound('slime');
     setIsSlimeBouncing(true);
@@ -453,7 +473,7 @@ export default function Home() {
     playHapticSound('click');
 
     if (app.id === -999) {
-      alert('💡 これは操作体験用の公式サンプルです。\n実際の案件に参加すると、14日間アプリを維持して感想を記入することで100ptを獲得できます！');
+      alert('💡 これは操作体験用の公式サンプルです。\n実際のアプリでは、インストール＆14日間維持しながらメモを書いておくことで100ptを獲得できます！');
       window.open(GOOGLE_GROUP_URL, '_blank', 'noopener,noreferrer');
       markGroupAsJoined();
       return;
@@ -494,26 +514,26 @@ export default function Home() {
     }
   };
 
-  const handleScreenshotUpload = async (e: React.ChangeEvent<HTMLInputElement>, participationId: number, dayKey: 'day1' | 'day7' | 'day14') => {
+  // スクショ1枚提出（1日目・中間・最終日のどこでも1回アップロードすればOK）
+  const handleSingleScreenshotUpload = async (e: React.ChangeEvent<HTMLInputElement>, participationId: number) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setUploadingTarget(`${participationId}_${dayKey}`);
+    setUploadingTarget(participationId);
     playHapticSound('click');
 
     try {
       const fileExt = file.name.split('.').pop();
-      const filePath = `proofs/${participationId}_${dayKey}_${Date.now()}.${fileExt}`;
+      const filePath = `proofs/${participationId}_single_${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage.from('task-proofs').upload(filePath, file);
       if (uploadError) throw uploadError;
 
       const { data: publicUrlData } = supabase.storage.from('task-proofs').getPublicUrl(filePath);
-      const dbColumn = `screenshot_${dayKey}`;
 
-      await supabase.from('test_participations').update({ [dbColumn]: publicUrlData.publicUrl }).eq('id', participationId);
+      await supabase.from('test_participations').update({ screenshot_day1: publicUrlData.publicUrl }).eq('id', participationId);
 
-      setMyTests(myTests.map((t) => t.id === participationId ? { ...t, [dbColumn]: publicUrlData.publicUrl } : t));
+      setMyTests(myTests.map((t) => t.id === participationId ? { ...t, screenshot_day1: publicUrlData.publicUrl } : t));
       playHapticSound('success');
       alert('起動スクショを保存しました！');
     } catch (err: any) {
@@ -523,43 +543,70 @@ export default function Home() {
     }
   };
 
-  const handleFeedbackSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeCompletingTest || !user) return;
+  // フィードバックの開閉（初日からいつでも編集可能）
+  const openFeedbackEditor = (t: Participation) => {
+    playHapticSound('click');
+    setActiveEditingTest(t);
+    setDeviceModel(t.device_model || '');
+    setOsVersion(t.os_version || 'Android 14');
+    setGoodPoints(t.good_points || '');
+    setImprovements(t.improvements || '');
+    setBugReports(t.bug_reports || '');
+    setIsFeedbackModalOpen(true);
+  };
 
-    if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
-      alert('審査通過のため、「良かった点」「改善点」はそれぞれ20文字以上入力してください。');
-      return;
-    }
+  // 下書き保存（いつでも保存可能）
+  const handleSaveFeedbackDraft = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeEditingTest || !user) return;
 
     setFeedbackSubmitting(true);
     playHapticSound('click');
 
     try {
+      const days = getDaysPassed(activeEditingTest.started_at);
+      const isEligibleForAutoCompletion = days >= 14 && activeEditingTest.screenshot_day1 && goodPoints.trim().length >= 20 && improvements.trim().length >= 20;
+
+      const nextStatus = isEligibleForAutoCompletion ? 'completed' : activeEditingTest.status;
+
       const { error } = await supabase
         .from('test_participations')
         .update({
-          status: 'completed',
+          status: nextStatus,
           device_model: deviceModel,
           os_version: osVersion,
           good_points: goodPoints,
           improvements: improvements,
           bug_reports: bugReports,
         })
-        .eq('id', activeCompletingTest.id);
+        .eq('id', activeEditingTest.id);
 
       if (error) throw error;
 
-      const nextPoints = userPoints + REWARD_PER_TEST;
-      await supabase.from('profiles').update({ points: nextPoints }).eq('id', user.id);
-      setUserPoints(nextPoints);
+      if (isEligibleForAutoCompletion && activeEditingTest.status !== 'completed') {
+        const nextPoints = userPoints + REWARD_PER_TEST;
+        await supabase.from('profiles').update({ points: nextPoints }).eq('id', user.id);
+        setUserPoints(nextPoints);
+        playHapticSound('success');
+        alert(`🎉 14日間維持＆レビュー要件達成！\n報酬として ${REWARD_PER_TEST} pt を付与しました！`);
+      } else {
+        playHapticSound('success');
+        alert('メモ・フィードバックを保存しました！（期間中いつでも編集・追記できます）');
+      }
 
-      setMyTests(myTests.map((t) => t.id === activeCompletingTest.id ? { ...t, status: 'completed' } : t));
+      setMyTests(myTests.map((t) => t.id === activeEditingTest.id ? { 
+        ...t, 
+        status: nextStatus,
+        device_model: deviceModel,
+        os_version: osVersion,
+        good_points: goodPoints,
+        improvements: improvements,
+        bug_reports: bugReports
+      } : t));
+
       setIsFeedbackModalOpen(false);
-      playHapticSound('success');
-      alert(`🎉 14日間のテスト完遂、お疲れさまでした！\n報酬として ${REWARD_PER_TEST} pt を付与しました！`);
     } catch (err: any) {
-      alert('提出エラー: ' + err.message);
+      alert('保存エラー: ' + err.message);
     } finally {
       setFeedbackSubmitting(false);
     }
@@ -567,9 +614,9 @@ export default function Home() {
 
   const handleCopyReviewText = (appId: number) => {
     playHapticSound('click');
-    const feedbacks = allParticipations.filter((p) => p.app_id === appId && p.status === 'completed');
+    const feedbacks = allParticipations.filter((p) => p.app_id === appId && p.good_points && p.good_points.length >= 20);
     if (feedbacks.length === 0) {
-      alert('まだ完了テスターのフィードバックが集まっていません。14日経過後の提出をお待ちください。');
+      alert('まだ集まったフィードバックがありません。');
       return;
     }
 
@@ -599,18 +646,13 @@ export default function Home() {
     window.open(twitterIntent, '_blank', 'noopener,noreferrer');
   };
 
-  const getDaysPassed = (startDate: string) => {
-    const diff = new Date().getTime() - new Date(startDate).getTime();
-    return Math.floor(diff / (1000 * 60 * 60 * 24));
-  };
-
   const myCreatedApps = user ? apps.filter((a) => a.user_id === user.id) : [];
   const displayedApps = apps.length > 0 ? apps : [DEMO_SAMPLE_APP];
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-between font-sans">
       <div>
-        {/* ヘッダー: スマホマーク撤去 ＆ テスポスライム配置 */}
+        {/* ヘッダー */}
         <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-emerald-100 px-4 py-2.5 shadow-xs">
           <div className="max-w-md mx-auto flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -629,15 +671,12 @@ export default function Home() {
                 title="タップしてね！"
               >
                 <div className={`relative transition-transform duration-300 ${isSlimeBouncing ? 'scale-125 -translate-y-1' : 'group-hover:scale-110 active:scale-95'}`}>
-                  {/* スライム本体（SVG） */}
                   <svg className="w-7 h-7 text-emerald-500 fill-emerald-400 drop-shadow-xs" viewBox="0 0 100 100">
                     <path d="M50 15 C25 15, 12 45, 12 70 C12 88, 28 92, 50 92 C72 92, 88 88, 88 70 C88 45, 75 15, 50 15 Z" />
-                    {/* つぶらな目 */}
                     <circle cx="38" cy="55" r="5" fill="#064e3b" />
                     <circle cx="62" cy="55" r="5" fill="#064e3b" />
                     <circle cx="40" cy="53" r="1.5" fill="#ffffff" />
                     <circle cx="64" cy="53" r="1.5" fill="#ffffff" />
-                    {/* にっこり口 */}
                     <path d="M44 68 Q50 74 56 68" stroke="#064e3b" strokeWidth="2.5" strokeLinecap="round" fill="none" />
                   </svg>
                 </div>
@@ -758,7 +797,7 @@ export default function Home() {
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Xでサービスをシェア</span>
                 </button>
-                <p className="text-[10px] text-slate-400 text-center">Version 2.2</p>
+                <p className="text-[10px] text-slate-400 text-center">Version 2.3</p>
               </div>
             </div>
             <div className="flex-1" onClick={() => { playHapticSound('click'); setIsMenuOpen(false); }} />
@@ -827,13 +866,13 @@ export default function Home() {
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
-                  <p><strong>他のアプリを14日間テスト</strong>してポイントを貯めたり、審査用の感想レポートを回収！</p>
+                  <p><strong>他のアプリを14日間テスト</strong>しながらスクショ1枚＆感想メモを保存しておけば、14日後に自動で100pt獲得！</p>
                 </div>
               </div>
             )}
           </div>
 
-          {/* 分かりやすいタブナビゲーション（緑を強調） */}
+          {/* タブナビゲーション */}
           <div className="grid grid-cols-3 gap-1 bg-emerald-100/60 p-1 rounded-xl text-xs font-bold text-slate-600">
             <button
               onClick={() => { playHapticSound('tab'); setActiveTab('explore'); }}
@@ -975,7 +1014,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* タブ2: 参加中（14日間維持＆スクショ管理） */}
+          {/* タブ2: 参加中（スクショ1回＋いつでもメモ編集＋14日自動受取） */}
           {activeTab === 'joined' && (
             <div className="space-y-3 pt-1">
               {myTests.length === 0 ? (
@@ -991,8 +1030,9 @@ export default function Home() {
               ) : (
                 myTests.map((t) => {
                   const days = getDaysPassed(t.started_at);
-                  const isReadyToComplete = days >= 14;
                   const isCompleted = t.status === 'completed';
+                  const hasScreenshot = Boolean(t.screenshot_day1);
+                  const hasReview = (t.good_points?.length || 0) >= 20 && (t.improvements?.length || 0) >= 20;
 
                   return (
                     <div key={t.id} className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs space-y-3">
@@ -1001,7 +1041,7 @@ export default function Home() {
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
                             isCompleted ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-700'
                           }`}>
-                            {isCompleted ? 'テスト完了・受取済' : `${days}日目 / 14日間`}
+                            {isCompleted ? 'テスト完了・獲得済' : `${days}日目 / 14日間`}
                           </span>
                           <h4 className="font-bold text-slate-900 text-sm mt-1">{t.app?.name || 'テストアプリ'}</h4>
                         </div>
@@ -1015,79 +1055,61 @@ export default function Home() {
                         />
                       </div>
 
-                      <div className="bg-emerald-50/40 p-3 rounded-lg border border-emerald-100">
-                        <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5 mb-2">
-                          <Camera className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>起動証明スクショ提出（ステータスバーの時計必須）</span>
-                        </p>
-                        <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
-                          <label className="border border-dashed border-emerald-300 rounded p-2 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
-                            <span className="font-medium text-slate-600">1日目（開始）</span>
-                            {t.screenshot_day1 ? (
-                              <span className="text-emerald-600 font-bold mt-1">提出済 ✓</span>
-                            ) : uploadingTarget === `${t.id}_day1` ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 mt-1" />
-                            ) : (
-                              <span className="text-emerald-600 font-bold mt-1">保存</span>
-                            )}
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleScreenshotUpload(e, t.id, 'day1')} />
-                          </label>
+                      {/* スクショ1回＆いつでもメモ記入のスマート設計 */}
+                      <div className="bg-emerald-50/40 p-3 rounded-lg border border-emerald-100 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                            <Camera className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>起動スクショ（期間中に1枚だけでOK）</span>
+                          </p>
+                          {hasScreenshot ? (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded flex items-center gap-0.5">
+                              <CheckCircle2 className="w-3 h-3" /> 保存済
+                            </span>
+                          ) : (
+                            <label className="text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded cursor-pointer transition shadow-2xs">
+                              {uploadingTarget === t.id ? 'アップ中...' : '+ スクショ選択'}
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleSingleScreenshotUpload(e, t.id)} />
+                            </label>
+                          )}
+                        </div>
 
-                          <label className="border border-dashed border-emerald-300 rounded p-2 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
-                            <span className="font-medium text-slate-600">7日目（中間）</span>
-                            {t.screenshot_day7 ? (
-                              <span className="text-emerald-600 font-bold mt-1">提出済 ✓</span>
-                            ) : uploadingTarget === `${t.id}_day7` ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 mt-1" />
+                        <div className="flex items-center justify-between pt-1 border-t border-emerald-100/80">
+                          <div className="text-[11px] text-slate-600">
+                            <span className="font-bold">フィードバックメモ:</span>{' '}
+                            {hasReview ? (
+                              <span className="text-emerald-700 font-bold">20文字以上入力済 ✓</span>
                             ) : (
-                              <span className="text-emerald-600 font-bold mt-1">保存</span>
+                              <span className="text-amber-700">下書き保存中（タップして編集）</span>
                             )}
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleScreenshotUpload(e, t.id, 'day7')} />
-                          </label>
-
-                          <label className="border border-dashed border-emerald-300 rounded p-2 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
-                            <span className="font-medium text-slate-600">14日目（完遂）</span>
-                            {t.screenshot_day14 ? (
-                              <span className="text-emerald-600 font-bold mt-1">提出済 ✓</span>
-                            ) : uploadingTarget === `${t.id}_day14` ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 mt-1" />
-                            ) : (
-                              <span className="text-emerald-600 font-bold mt-1">保存</span>
-                            )}
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleScreenshotUpload(e, t.id, 'day14')} />
-                          </label>
+                          </div>
+                          <button
+                            onClick={() => openFeedbackEditor(t)}
+                            className="text-xs font-bold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-md transition shadow-2xs flex items-center gap-1"
+                          >
+                            <MessageSquare className="w-3 h-3" />
+                            <span>{hasReview ? 'メモを確認・編集' : 'メモを書く'}</span>
+                          </button>
                         </div>
                       </div>
 
                       <div className="flex justify-between items-center pt-1 text-xs">
                         <span className="text-slate-500 text-[11px]">
                           {isCompleted 
-                            ? '獲得完了' 
-                            : isReadyToComplete 
-                              ? '14日達成！フィードバック記入可能' 
-                              : `あと ${14 - days} 日間端末に保持`}
+                            ? '100pt 受取完了' 
+                            : days >= 14 
+                              ? (hasScreenshot && hasReview ? '14日達成！自動付与完了' : 'スクショまたはメモを完成させてください')
+                              : `あと ${14 - days} 日間端末に保持（14日経過で自動付与）`}
                         </span>
 
                         {isCompleted ? (
                           <span className="text-emerald-600 font-bold flex items-center gap-1">
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            受取完了
+                            獲得完了
                           </span>
-                        ) : isReadyToComplete ? (
-                          <button
-                            onClick={() => {
-                              playHapticSound('click');
-                              setActiveCompletingTest(t);
-                              setIsFeedbackModalOpen(true);
-                            }}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1 shadow-xs transition"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                            感想を書いて100pt受取
-                          </button>
                         ) : (
                           <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-medium">
-                            端末に保持中
+                            保持追跡中
                           </span>
                         )}
                       </div>
@@ -1295,27 +1317,26 @@ export default function Home() {
         </div>
       )}
 
-      {/* フィードバック記入モーダル */}
-      {isFeedbackModalOpen && activeCompletingTest && (
+      {/* いつでも下書き・追記できるフィードバックモーダル */}
+      {isFeedbackModalOpen && activeEditingTest && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl p-5 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-3">
               <div>
-                <h3 className="font-bold text-slate-900 text-base">テスト完了フィードバック提出</h3>
-                <p className="text-[11px] text-slate-500">Google Play審査申請用のフィードバックを記録します</p>
+                <h3 className="font-bold text-slate-900 text-base">感想・改善メモ（随時保存）</h3>
+                <p className="text-[11px] text-slate-500">気付いた点をメモしておくと、14日経過時に自動で審査用レポートになります</p>
               </div>
               <button onClick={() => { playHapticSound('click'); setIsFeedbackModalOpen(false); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleFeedbackSubmit} className="space-y-3 text-xs">
+            <form onSubmit={handleSaveFeedbackDraft} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">使用端末名 *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">使用端末名</label>
                   <input
                     type="text"
-                    required
                     placeholder="例: Pixel 8, Galaxy S23"
                     value={deviceModel}
                     onChange={(e) => setDeviceModel(e.target.value)}
@@ -1323,10 +1344,9 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">OSバージョン *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">OSバージョン</label>
                   <input
                     type="text"
-                    required
                     placeholder="Android 14"
                     value={osVersion}
                     onChange={(e) => setOsVersion(e.target.value)}
@@ -1337,14 +1357,14 @@ export default function Home() {
 
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <label className="font-semibold text-slate-700">良かった点・使い心地 (20文字以上) *</label>
+                  <label className="font-semibold text-slate-700">良かった点・使い心地 (20文字以上推奨)</label>
                   <span className={`text-[10px] font-bold ${goodPoints.trim().length >= 20 ? 'text-emerald-600' : 'text-slate-400'}`}>
                     {goodPoints.trim().length} / 20文字
                   </span>
                 </div>
                 <textarea
-                  required
                   rows={2}
+                  placeholder="直感的で操作がスムーズ、デザインが見やすいなど"
                   value={goodPoints}
                   onChange={(e) => setGoodPoints(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
@@ -1353,14 +1373,14 @@ export default function Home() {
 
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <label className="font-semibold text-slate-700">改善してほしい点・気になる点 (20文字以上) *</label>
+                  <label className="font-semibold text-slate-700">改善してほしい点・気になる点 (20文字以上推奨)</label>
                   <span className={`text-[10px] font-bold ${improvements.trim().length >= 20 ? 'text-emerald-600' : 'text-slate-400'}`}>
                     {improvements.trim().length} / 20文字
                   </span>
                 </div>
                 <textarea
-                  required
                   rows={2}
+                  placeholder="文字のコントラストが低く見づらい、戻るボタンの挙動など"
                   value={improvements}
                   onChange={(e) => setImprovements(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
@@ -1368,22 +1388,27 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">不具合報告（なければ「なし」） *</label>
+                <label className="block font-semibold text-slate-700 mb-1">不具合報告（なければ「なし」）</label>
                 <input
                   type="text"
-                  required
+                  placeholder="なし、または発生した画面"
                   value={bugReports}
                   onChange={(e) => setBugReports(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
                 />
               </div>
 
+              <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 text-[11px] text-emerald-800">
+                💡 <strong>安心設計：</strong> 14日後にわざわざ操作しなくても、ここで20文字以上メモを保存しスクショを1枚上げておけば、14日経過した瞬間に100ptが自動付与されます。
+              </div>
+
               <button
                 type="submit"
-                disabled={feedbackSubmitting || goodPoints.trim().length < 20 || improvements.trim().length < 20 || !deviceModel.trim()}
-                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition disabled:opacity-40"
+                disabled={feedbackSubmitting}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition flex items-center justify-center gap-1.5"
               >
-                {feedbackSubmitting ? '提出中...' : '提出して 100 pt を獲得'}
+                <Save className="w-3.5 h-3.5" />
+                <span>{feedbackSubmitting ? '保存中...' : 'メモを保存する'}</span>
               </button>
             </form>
           </div>
