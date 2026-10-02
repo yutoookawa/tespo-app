@@ -10,7 +10,6 @@ import {
   ExternalLink, 
   Calendar, 
   CheckCircle2, 
-  ShieldCheck, 
   Camera, 
   Trash2, 
   LogIn, 
@@ -20,28 +19,35 @@ import {
   Menu, 
   BookOpen, 
   Share2, 
-  Info, 
-  ChevronDown, 
-  ChevronUp, 
-  FileText, 
+  ChevronRight, 
+  ArrowLeft,
   Award, 
   Save, 
-  AlertCircle, 
-  HelpCircle, 
   Layers, 
   ArrowRight,
-  HandMetal
+  ShieldCheck,
+  Check
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 
-// --- Web Audio API（YouTube/ゲーム標準音量） ---
+// --- Web Audio API（シングルトン化：連打による音詰まりを根絶 & 音量ブースト） ---
+let sharedAudioCtx: AudioContext | null = null;
+
+const getAudioContext = () => {
+  if (typeof window === 'undefined') return null;
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioContextClass) return null;
+  if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+    sharedAudioCtx = new AudioContextClass();
+  }
+  return sharedAudioCtx;
+};
+
 const playHapticSound = async (type: 'click' | 'success' | 'tab' | 'slime' = 'click') => {
-  if (typeof window === 'undefined') return;
   try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
+    const ctx = getAudioContext();
+    if (!ctx) return;
 
     if (ctx.state === 'suspended') {
       await ctx.resume();
@@ -55,38 +61,42 @@ const playHapticSound = async (type: 'click' | 'success' | 'tab' | 'slime' = 'cl
     const now = ctx.currentTime;
 
     if (type === 'slime') {
+      // 弾力スライム音
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(320, now);
-      osc.frequency.exponentialRampToValueAtTime(780, now + 0.08);
-      osc.frequency.exponentialRampToValueAtTime(450, now + 0.16);
-      gain.gain.setValueAtTime(0.65, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      osc.frequency.setValueAtTime(340, now);
+      osc.frequency.exponentialRampToValueAtTime(820, now + 0.08);
+      osc.frequency.exponentialRampToValueAtTime(460, now + 0.16);
+      gain.gain.setValueAtTime(0.85, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
       osc.start(now);
-      osc.stop(now + 0.2);
+      osc.stop(now + 0.22);
     } else if (type === 'click') {
+      // はっきり聴こえる操作クリック音（音量0.8にブースト）
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(800, now);
-      osc.frequency.exponentialRampToValueAtTime(260, now + 0.05);
-      gain.gain.setValueAtTime(0.6, now);
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(280, now + 0.05);
+      gain.gain.setValueAtTime(0.8, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
       osc.start(now);
       osc.stop(now + 0.05);
     } else if (type === 'tab') {
+      // タブ切り替え
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(520, now);
-      osc.frequency.exponentialRampToValueAtTime(780, now + 0.06);
-      gain.gain.setValueAtTime(0.45, now);
+      osc.frequency.setValueAtTime(560, now);
+      osc.frequency.exponentialRampToValueAtTime(840, now + 0.06);
+      gain.gain.setValueAtTime(0.65, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
       osc.start(now);
       osc.stop(now + 0.06);
     } else if (type === 'success') {
+      // 完了チャイム
       osc.type = 'sine';
       osc.frequency.setValueAtTime(523.25, now);
       osc.frequency.setValueAtTime(659.25, now + 0.08);
-      gain.gain.setValueAtTime(0.55, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+      gain.gain.setValueAtTime(0.75, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
       osc.start(now);
-      osc.stop(now + 0.26);
+      osc.stop(now + 0.28);
     }
   } catch (e) {}
 };
@@ -151,12 +161,14 @@ export default function Home() {
   const [allParticipations, setAllParticipations] = useState<Participation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // メイン画面とメニュー詳細ビューの切り替え ('home' | 'guide_tester' | 'guide_dev' | 'guide_multi')
+  const [currentView, setCurrentView] = useState<'home' | 'guide_tester' | 'guide_dev' | 'guide_multi'>('home');
   const [activeTab, setActiveTab] = useState<'explore' | 'joined' | 'my_apps'>('explore');
   const [isGroupJoinedState, setIsGroupJoinedState] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isSlimeBouncing, setIsSlimeBouncing] = useState(false);
 
-  // ポケモン風インタラクティブチュートリアル
+  // ポケモン風ガイド
   const [tutorialStep, setTutorialStep] = useState<number | null>(null);
   
   // モーダル
@@ -164,7 +176,6 @@ export default function Home() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [activeManualModal, setActiveManualModal] = useState<'about' | 'dev' | 'multi' | 'faq' | 'terms' | null>(null);
   const [activeEditingTest, setActiveEditingTest] = useState<Participation | null>(null);
   
   // 認証フォーム
@@ -184,7 +195,7 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
-  // レビュー下書き・編集
+  // レビュー編集
   const [deviceModel, setDeviceModel] = useState('');
   const [osVersion, setOsVersion] = useState('Android 14');
   const [goodPoints, setGoodPoints] = useState('');
@@ -239,9 +250,7 @@ export default function Home() {
         setUsername(data.username || '開発者');
         setUserPoints(data.points ?? 0);
       }
-    } catch (err) {
-      console.error('プロファイル取得エラー:', err);
-    }
+    } catch (err) {}
   };
 
   const getDaysPassed = (startDate: string) => {
@@ -272,7 +281,6 @@ export default function Home() {
         const userParticipations = partData.filter((p) => p.user_id === currentUserId);
         setMyTests(userParticipations);
 
-        // 14日達成時の自動完了判定
         userParticipations.forEach(async (p) => {
           if (p.status === 'testing' && getDaysPassed(p.started_at) >= 14) {
             const hasScreenshot = Boolean(p.screenshot_day1);
@@ -287,13 +295,11 @@ export default function Home() {
             }
           }
         });
-
       } else {
         const localJoined = JSON.parse(localStorage.getItem('tespo_joined_ids') || '[]');
         setMyTests((partData || []).filter((p) => localJoined.includes(p.id)));
       }
     } catch (err) {
-      console.error('データ取得エラー:', err);
     } finally {
       setIsLoading(false);
     }
@@ -309,6 +315,13 @@ export default function Home() {
     playHapticSound('slime');
     setIsSlimeBouncing(true);
     setTimeout(() => setIsSlimeBouncing(false), 500);
+  };
+
+  const navigateToView = (view: 'home' | 'guide_tester' | 'guide_dev' | 'guide_multi') => {
+    playHapticSound('tab');
+    setIsMenuOpen(false);
+    setCurrentView(view);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -462,11 +475,9 @@ export default function Home() {
     }
   };
 
-  // 案件参加処理（肯定的なルール提示）
   const handleJoinTest = async (app: AppItem) => {
     playHapticSound('click');
 
-    // 公式サンプル案件はゲーム風チュートリアルを開始
     if (app.id === -999) {
       setTutorialStep(1);
       return;
@@ -663,7 +674,6 @@ export default function Home() {
                 <Menu className="w-5 h-5" />
               </button>
 
-              {/* ぷよんと跳ねるテスポスライム */}
               <div 
                 onClick={handleSlimeClick}
                 className="flex items-center gap-1.5 cursor-pointer select-none group"
@@ -739,7 +749,7 @@ export default function Home() {
           </div>
         </header>
 
-        {/* ドロワーメニュー */}
+        {/* ハンバーガーメニュー（簡潔でタップしやすいリスト） */}
         {isMenuOpen && (
           <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex">
             <div className="bg-white w-80 h-full border-r border-slate-200 shadow-2xl flex flex-col justify-between p-5 animate-in slide-in-from-left duration-200 overflow-y-auto">
@@ -747,58 +757,49 @@ export default function Home() {
                 <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
                     <span className="text-emerald-600 font-extrabold text-base">テスポ</span>
-                    <span>公式メニュー</span>
+                    <span>図解ガイドメニュー</span>
                   </div>
                   <button onClick={() => { playHapticSound('click'); setIsMenuOpen(false); }} className="text-slate-400 hover:text-slate-600 p-1">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
 
-                <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3 text-xs space-y-1.5">
-                  <div className="flex items-center gap-1.5 text-emerald-900 font-bold text-[11px]">
-                    <Layers className="w-4 h-4 text-emerald-600" />
-                    <span>他社サービス・自前募集との併用OK</span>
-                  </div>
-                  <p className="text-slate-600 text-[11px] leading-relaxed">
-                    Google Play Consoleには複数のGoogleグループを同時に登録できます。TestCrewやDiscordで集めたテスターのバックアップとしてテスポのグループを登録しておくと安全です。
-                  </p>
-                </div>
+                {/* 3つの明確な画面遷移メニュー */}
+                <div className="space-y-2">
+                  <button
+                    onClick={() => navigateToView('guide_tester')}
+                    className="w-full p-3 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 transition flex items-center justify-between text-left group"
+                  >
+                    <div>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">基本</span>
+                      <h4 className="text-xs font-bold text-slate-900 mt-1 group-hover:text-emerald-700">① テスター参加の流れ（図解）</h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">グループ参加から100pt獲得まで</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition" />
+                  </button>
 
-                <div className="space-y-1 text-xs font-medium text-slate-700">
                   <button
-                    onClick={() => { playHapticSound('click'); setIsMenuOpen(false); setActiveManualModal('about'); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-emerald-50/70 hover:text-emerald-800 transition text-left"
+                    onClick={() => navigateToView('guide_dev')}
+                    className="w-full p-3 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 transition flex items-center justify-between text-left group"
                   >
-                    <Info className="w-4 h-4 text-emerald-600" />
-                    <span>テスターズフィールドの設計思想</span>
+                    <div>
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">開発者</span>
+                      <h4 className="text-xs font-bold text-slate-900 mt-1 group-hover:text-emerald-700">② 自作アプリ募集＆審査申請（図解）</h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Play Console登録とレポート出力</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition" />
                   </button>
+
                   <button
-                    onClick={() => { playHapticSound('click'); setIsMenuOpen(false); setActiveManualModal('dev'); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-emerald-50/70 hover:text-emerald-800 transition text-left"
+                    onClick={() => navigateToView('guide_multi')}
+                    className="w-full p-3 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 transition flex items-center justify-between text-left group"
                   >
-                    <BookOpen className="w-4 h-4 text-emerald-600" />
-                    <span>Google Play Console設定＆審査申請ガイド</span>
-                  </button>
-                  <button
-                    onClick={() => { playHapticSound('click'); setIsMenuOpen(false); setActiveManualModal('multi'); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-emerald-50/70 hover:text-emerald-800 transition text-left"
-                  >
-                    <Layers className="w-4 h-4 text-emerald-600" />
-                    <span>他社ツール併用・グループ複数登録の仕組み</span>
-                  </button>
-                  <button
-                    onClick={() => { playHapticSound('click'); setIsMenuOpen(false); setActiveManualModal('faq'); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-emerald-50/70 hover:text-emerald-800 transition text-left"
-                  >
-                    <HelpCircle className="w-4 h-4 text-emerald-600" />
-                    <span>審査落ちを防ぐための必須FAQ</span>
-                  </button>
-                  <button
-                    onClick={() => { playHapticSound('click'); setIsMenuOpen(false); setActiveManualModal('terms'); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-emerald-50/70 hover:text-emerald-800 transition text-left"
-                  >
-                    <FileText className="w-4 h-4 text-emerald-600" />
-                    <span>利用規約 / 14日間維持のルール</span>
+                    <div>
+                      <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded">便利</span>
+                      <h4 className="text-xs font-bold text-slate-900 mt-1 group-hover:text-emerald-700">③ 他社ツール（TestCrew等）との併用（図解）</h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">複数グループ登録で人数を倍増</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition" />
                   </button>
                 </div>
               </div>
@@ -811,405 +812,576 @@ export default function Home() {
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Xでサービスをシェア</span>
                 </button>
-                <p className="text-[10px] text-slate-400 text-center font-mono">TestersField Core v2.5</p>
+                <p className="text-[10px] text-slate-400 text-center font-mono">TestersField Core v2.6</p>
               </div>
             </div>
             <div className="flex-1" onClick={() => { playHapticSound('click'); setIsMenuOpen(false); }} />
           </div>
         )}
 
-        <div className="max-w-md mx-auto px-4 pt-3 space-y-3">
-          
-          {/* 保有ポイント ＆ グループ参加ステータス */}
-          <div className="bg-gradient-to-r from-emerald-600 to-teal-700 rounded-xl p-3 text-white shadow-sm flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="bg-white/20 p-2 rounded-lg backdrop-blur-xs">
-                <Sparkles className="w-5 h-5 text-amber-300" />
-              </div>
-              <div>
-                <p className="text-[11px] text-emerald-100 font-medium leading-none">保有ポイント</p>
-                <p className="text-xl font-extrabold mt-1 leading-none flex items-baseline gap-0.5">
-                  {userPoints.toLocaleString()} <span className="text-[10px] font-normal text-emerald-200">pt</span>
-                </p>
-              </div>
-            </div>
+        {/* 画面遷移パターン①：テスター参加図解ビュー */}
+        {currentView === 'guide_tester' && (
+          <div className="max-w-md mx-auto px-4 py-4 space-y-4 animate-in fade-in duration-150">
+            <button
+              onClick={() => navigateToView('home')}
+              className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:underline"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>ホームに戻る</span>
+            </button>
 
-            {isGroupJoinedState ? (
-              <span className="text-xs font-bold text-white bg-white/20 border border-white/30 px-3 py-1.5 rounded-lg flex items-center gap-1 backdrop-blur-xs">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
-                グループ参加済
-              </span>
-            ) : (
-              <a
-                href={GOOGLE_GROUP_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={markGroupAsJoined}
-                className="text-xs font-bold text-emerald-800 bg-white hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition shadow-xs flex items-center gap-1"
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-emerald-600 text-white text-xs flex items-center justify-center font-bold">1</span>
+                <span>テスター参加の図解ステップ</span>
+              </h2>
+
+              <div className="space-y-4 text-xs text-slate-700">
+                {/* STEP 1 */}
+                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2">
+                  <span className="font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded text-[10px]">STEP 1</span>
+                  <h3 className="font-bold text-slate-900">公式Googleグループに参加する</h3>
+                  <div className="border border-emerald-300 bg-white rounded-lg p-2.5 text-center text-[11px] text-slate-600 shadow-2xs">
+                    📱 <strong>【実機スマホと同じGoogleアカウント】</strong>でグループに参加！<br />
+                    （未参加だとPlayストアで「見つかりません」と出ます）
+                  </div>
+                </div>
+
+                {/* STEP 2 */}
+                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2">
+                  <span className="font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded text-[10px]">STEP 2</span>
+                  <h3 className="font-bold text-slate-900">アプリをインストールして14日間残す</h3>
+                  <div className="border border-emerald-300 bg-white rounded-lg p-2.5 text-center text-[11px] text-slate-600 shadow-2xs">
+                    ⏳ <strong>【アンインストール・削除は厳禁！】</strong><br />
+                    14日間スマホに残しておくことで、相手の開発者の審査条件を満たせます。
+                  </div>
+                </div>
+
+                {/* STEP 3 */}
+                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2">
+                  <span className="font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded text-[10px]">STEP 3</span>
+                  <h3 className="font-bold text-slate-900">スクショ1枚＆感想メモで自動完了！</h3>
+                  <div className="border border-emerald-300 bg-white rounded-lg p-2.5 text-center text-[11px] text-slate-600 shadow-2xs">
+                    📝 <strong>【期間中いつでもメモ保存可能】</strong><br />
+                    スクショ1枚と20文字以上の感想を保存しておけば、14日経過時に自動で100ptが付与されます！
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => navigateToView('home')}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-xs"
               >
-                <span>必須：グループ参加</span>
-                <ExternalLink className="w-3 h-3 text-emerald-600" />
-              </a>
-            )}
+                分かった！ホームで案件を探す
+              </button>
+            </div>
           </div>
+        )}
 
-          {/* 3ステップ使い方ガイド */}
-          <div className="bg-white rounded-xl border border-emerald-100 overflow-hidden shadow-2xs">
+        {/* 画面遷移パターン②：開発者募集＆審査申請図解ビュー */}
+        {currentView === 'guide_dev' && (
+          <div className="max-w-md mx-auto px-4 py-4 space-y-4 animate-in fade-in duration-150">
             <button
-              onClick={() => { playHapticSound('tab'); setIsGuideOpen(!isGuideOpen); }}
-              className="w-full px-3.5 py-2 text-xs font-bold text-slate-700 flex items-center justify-between hover:bg-emerald-50/40 transition"
+              onClick={() => navigateToView('home')}
+              className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:underline"
             >
-              <span className="flex items-center gap-1.5 text-emerald-800">
-                <Award className="w-4 h-4 text-emerald-600" />
-                <span>初めての方へ：テスポの全体の流れ</span>
-              </span>
-              <span className="text-[11px] text-slate-400 flex items-center gap-0.5 font-normal">
-                {isGuideOpen ? '閉じる' : '手順を見る'}
-                {isGuideOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </span>
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>ホームに戻る</span>
             </button>
-            {isGuideOpen && (
-              <div className="px-3.5 pb-3 pt-1 text-[11px] text-slate-600 border-t border-emerald-100 bg-emerald-50/20 space-y-1.5">
-                <div className="flex items-start gap-2">
-                  <span className="w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
-                  <p><strong>公式Googleグループに参加</strong>（実機のPlayストアと同じGoogleアカウント）</p>
+
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">2</span>
+                <span>アプリ募集＆Console申請の図解手順</span>
+              </h2>
+
+              <div className="space-y-4 text-xs text-slate-700">
+                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2">
+                  <span className="font-bold text-blue-800 bg-blue-100 px-2 py-0.5 rounded text-[10px]">STEP 1</span>
+                  <h3 className="font-bold text-slate-900">Google Play Consoleにグループアドレスを追加</h3>
+                  <div className="bg-white border border-blue-200 rounded p-2 text-center text-[11px] font-mono text-blue-700">
+                    testers-field@googlegroups.com
+                  </div>
+                  <p className="text-[11px] text-slate-500">Consoleの「クローズドテスト」&gt;「テスター」に追加して保存します。</p>
                 </div>
-                <div className="flex items-start gap-2">
-                  <span className="w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
-                  <p><strong>アプリを募集する</strong>（初回プレゼントの1,500ptですぐに15人分募集できるよ！）</p>
+
+                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2">
+                  <span className="font-bold text-blue-800 bg-blue-100 px-2 py-0.5 rounded text-[10px]">STEP 2</span>
+                  <h3 className="font-bold text-slate-900">Web参加用URLをテスポに投稿（1,500pt）</h3>
+                  <p className="text-[11px] text-slate-500">初回登録で1,500ptが無料プレゼントされているので、すぐに15人分の募集を開始できます！</p>
                 </div>
-                <div className="flex items-start gap-2">
-                  <span className="w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
-                  <p><strong>他のアプリを14日間スマホに残そう！</strong>（テスト画面のスクショ＆メモを保存しておけば、14日後に自動で100pt獲得！）</p>
+
+                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2">
+                  <span className="font-bold text-blue-800 bg-blue-100 px-2 py-0.5 rounded text-[10px]">STEP 3</span>
+                  <h3 className="font-bold text-slate-900">14日後、審査エビデンスをワンタップコピー！</h3>
+                  <div className="bg-white border border-slate-200 rounded p-2 text-[10px] font-mono text-slate-600">
+                    「審査申請用フィードバックをコピー」ボタンを押して、Consoleの申請アンケートにそのまま貼り付けるだけで申請完了！
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* タブナビゲーション */}
-          <div className="grid grid-cols-3 gap-1 bg-emerald-100/60 p-1 rounded-xl text-xs font-bold text-slate-600">
-            <button
-              onClick={() => { playHapticSound('tab'); setActiveTab('explore'); }}
-              className={`py-2 rounded-lg transition ${
-                activeTab === 'explore'
-                  ? 'bg-white text-emerald-800 shadow-xs border border-emerald-200/60'
-                  : 'hover:text-emerald-900'
-              }`}
-            >
-              探す・参加 ({displayedApps.length})
-            </button>
-            <button
-              id="guide-tab-joined"
-              onClick={() => { 
-                playHapticSound('tab'); 
-                setActiveTab('joined');
-                if (tutorialStep === 2) setTutorialStep(3);
-              }}
-              className={`py-2 rounded-lg transition ${
-                activeTab === 'joined'
-                  ? 'bg-white text-emerald-800 shadow-xs border border-emerald-200/60'
-                  : 'hover:text-emerald-900'
-              } ${tutorialStep === 2 ? 'ring-2 ring-amber-400 animate-pulse' : ''}`}
-            >
-              参加中・14日管理 ({myTests.length})
-            </button>
-            <button
-              onClick={() => { playHapticSound('tab'); setActiveTab('my_apps'); }}
-              className={`py-2 rounded-lg transition ${
-                activeTab === 'my_apps'
-                  ? 'bg-white text-emerald-800 shadow-xs border border-emerald-200/60'
-                  : 'hover:text-emerald-900'
-              }`}
-            >
-              自分の案件 ({myCreatedApps.length})
-            </button>
+              <button
+                onClick={() => {
+                  navigateToView('home');
+                  if (!user) {
+                    setIsSignUp(true);
+                    setIsAuthModalOpen(true);
+                  } else {
+                    setIsModalOpen(true);
+                  }
+                }}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-xs"
+              >
+                今すぐ案件を募集してみる！
+              </button>
+            </div>
           </div>
+        )}
 
-          {/* タブ1: 募集中のアプリ一覧 */}
-          {activeTab === 'explore' && (
-            <div className="space-y-3 pt-1">
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                  <Loader2 className="w-6 h-6 animate-spin text-emerald-600 mb-2" />
-                  <p className="text-xs">アプリを読み込み中...</p>
+        {/* 画面遷移パターン③：他社ツール併用図解ビュー */}
+        {currentView === 'guide_multi' && (
+          <div className="max-w-md mx-auto px-4 py-4 space-y-4 animate-in fade-in duration-150">
+            <button
+              onClick={() => navigateToView('home')}
+              className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:underline"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>ホームに戻る</span>
+            </button>
+
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-bold">3</span>
+                <span>他社ツール（TestCrew・Discord）との併用</span>
+              </h2>
+
+              <div className="space-y-3 text-xs text-slate-700">
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-3.5 space-y-2">
+                  <h3 className="font-bold text-purple-900 text-sm">💡 Googleグループは「何個でも同時に登録可能」！</h3>
+                  <p className="text-[11px] text-purple-800 leading-relaxed">
+                    Google Play Consoleは複数のメールリスト・Googleグループを同時登録できる仕様です。既存のグループを消す必要は一切ありません。
+                  </p>
                 </div>
+
+                <div className="border border-slate-200 rounded-xl p-3 space-y-2">
+                  <h4 className="font-bold text-slate-900">併用するメリット（バックアップ保険）</h4>
+                  <ul className="space-y-1.5 text-[11px] text-slate-600">
+                    <li className="flex items-start gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                      <span><strong>離脱対策</strong>: 他社のテスターが途中で辞めても、テスポの15人がいれば12人要件を安全クリア！</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                      <span><strong>証拠づくり</strong>: 他社で不足しがちな「審査用の具体的なフィードバック意見」をテスポで自動確保！</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <button
+                onClick={() => navigateToView('home')}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-xs"
+              >
+                理解できた！ホームに戻る
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 通常のホーム画面 */}
+        {currentView === 'home' && (
+          <div className="max-w-md mx-auto px-4 pt-3 space-y-3">
+            
+            {/* 保有ポイント ＆ グループ参加ステータス */}
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-700 rounded-xl p-3 text-white shadow-sm flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="bg-white/20 p-2 rounded-lg backdrop-blur-xs">
+                  <Sparkles className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <p className="text-[11px] text-emerald-100 font-medium leading-none">保有ポイント</p>
+                  <p className="text-xl font-extrabold mt-1 leading-none flex items-baseline gap-0.5">
+                    {userPoints.toLocaleString()} <span className="text-[10px] font-normal text-emerald-200">pt</span>
+                  </p>
+                </div>
+              </div>
+
+              {isGroupJoinedState ? (
+                <span className="text-xs font-bold text-white bg-white/20 border border-white/30 px-3 py-1.5 rounded-lg flex items-center gap-1 backdrop-blur-xs">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                  グループ参加済
+                </span>
               ) : (
-                displayedApps.map((app) => {
-                  const isDemo = app.id === -999;
-                  const progress = Math.min(100, Math.round((app.current_testers / app.required_testers) * 100));
-                  const isJoined = myTests.some((t) => t.app_id === app.id);
-                  const isMyCreated = user && app.user_id === user.id;
-
-                  return (
-                    <div
-                      key={app.id}
-                      className={`bg-white rounded-xl p-4 border shadow-xs flex flex-col justify-between transition ${
-                        isDemo ? 'border-emerald-400 ring-2 ring-emerald-200/60 bg-emerald-50/20' : 'border-emerald-100/90 hover:border-emerald-300'
-                      } ${tutorialStep === 1 && isDemo ? 'ring-4 ring-amber-400' : ''}`}
-                    >
-                      <div>
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded mb-1 ${
-                              isDemo ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            }`}>
-                              {isDemo ? '公式サンプル' : app.category}
-                            </span>
-                            <h3 className="font-bold text-slate-900 text-base">{app.name}</h3>
-                            <p className="text-xs text-slate-500 mt-0.5">{app.developer}</p>
-                          </div>
-                          <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
-                            +{app.reward_points} pt
-                          </span>
-                        </div>
-
-                        <div className="flex flex-wrap gap-1 mb-3">
-                          {app.tags?.map((tag, idx) => (
-                            <span key={idx} className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
-                              #{tag}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="space-y-1 mb-2.5">
-                          <div className="flex justify-between text-xs text-slate-500 font-medium">
-                            <span className="flex items-center gap-1">
-                              <Users className="w-3.5 h-3.5 text-emerald-600" />
-                              テスター確保状況
-                            </span>
-                            <span>{app.current_testers} / {app.required_testers} 人</span>
-                          </div>
-                          <div className="w-full bg-emerald-100/70 h-2 rounded-full overflow-hidden">
-                            <div
-                              className="bg-emerald-500 h-full rounded-full transition-all duration-300"
-                              style={{ width: `${progress}%` }}
-                            />
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => handleJoinTest(app)}
-                          disabled={Boolean(!isDemo && (isJoined || isMyCreated))}
-                          className={`w-full py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-                            isDemo
-                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs active:scale-[0.99]'
-                              : isMyCreated
-                              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                              : isJoined
-                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-not-allowed'
-                              : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs active:scale-[0.99]'
-                          }`}
-                        >
-                          {isDemo ? (
-                            <>
-                              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                              <span>チュートリアルを体験する（操作ガイド）</span>
-                            </>
-                          ) : isMyCreated ? (
-                            <span>あなたが募集したアプリです</span>
-                          ) : isJoined ? (
-                            <>
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                              <span>現在テスト参加中</span>
-                            </>
-                          ) : (
-                            <>
-                              <Calendar className="w-3.5 h-3.5" />
-                              <span>14日間のテストに参加する</span>
-                              <ExternalLink className="w-3 h-3 ml-0.5" />
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
+                <a
+                  href={GOOGLE_GROUP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={markGroupAsJoined}
+                  className="text-xs font-bold text-emerald-800 bg-white hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition shadow-xs flex items-center gap-1"
+                >
+                  <span>必須：グループ参加</span>
+                  <ExternalLink className="w-3 h-3 text-emerald-600" />
+                </a>
               )}
             </div>
-          )}
 
-          {/* タブ2: 参加中（前向きなルール提示） */}
-          {activeTab === 'joined' && (
-            <div className="space-y-3 pt-1">
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-emerald-950 shadow-2xs space-y-1">
-                <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-800">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                  <span>【みんなでリリース成功を目指すお約束！】</span>
+            {/* 3ステップ使い方ガイド */}
+            <div className="bg-white rounded-xl border border-emerald-100 overflow-hidden shadow-2xs">
+              <button
+                onClick={() => { playHapticSound('tab'); setIsGuideOpen(!isGuideOpen); }}
+                className="w-full px-3.5 py-2 text-xs font-bold text-slate-700 flex items-center justify-between hover:bg-emerald-50/40 transition"
+              >
+                <span className="flex items-center gap-1.5 text-emerald-800">
+                  <Award className="w-4 h-4 text-emerald-600" />
+                  <span>初めての方へ：テスポの全体の流れ</span>
+                </span>
+                <span className="text-[11px] text-slate-400 flex items-center gap-0.5 font-normal">
+                  {isGuideOpen ? '閉じる' : '手順を見る'}
+                  {isGuideOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </span>
+              </button>
+              {isGuideOpen && (
+                <div className="px-3.5 pb-3 pt-1 text-[11px] text-slate-600 border-t border-emerald-100 bg-emerald-50/20 space-y-1.5">
+                  <div className="flex items-start gap-2">
+                    <span className="w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                    <p><strong>公式Googleグループに参加</strong>（実機のPlayストアと同じGoogleアカウント）</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                    <p><strong>アプリを募集する</strong>（初回プレゼントの1,500ptですぐに15人分募集できるよ！）</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                    <p><strong>他のアプリを14日間スマホに残そう！</strong>（テスト画面のスクショ＆メモを保存しておけば、14日後に自動で100pt獲得！）</p>
+                  </div>
                 </div>
-                <p className="text-[11px] text-emerald-800 leading-relaxed pl-5">
-                  14日間スマホに残しておこう！（アンインストール・削除は厳禁だよ）。途中で削除すると獲得ポイントが無効になっちゃうので気をつけてね！
-                </p>
-              </div>
+              )}
+            </div>
 
-              {myTests.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-xl border border-emerald-100 text-slate-500 p-6">
-                  <p className="text-xs">現在参加中のテストはありません。</p>
-                  <button
-                    onClick={() => { playHapticSound('tab'); setActiveTab('explore'); }}
-                    className="mt-3 text-xs text-emerald-600 font-bold hover:underline inline-block"
-                  >
-                    募集中のアプリを探す →
-                  </button>
-                </div>
-              ) : (
-                myTests.map((t) => {
-                  const days = getDaysPassed(t.started_at);
-                  const isCompleted = t.status === 'completed';
-                  const hasScreenshot = Boolean(t.screenshot_day1);
-                  const hasReview = (t.good_points?.length || 0) >= 20 && (t.improvements?.length || 0) >= 20;
+            {/* タブナビゲーション */}
+            <div className="grid grid-cols-3 gap-1 bg-emerald-100/60 p-1 rounded-xl text-xs font-bold text-slate-600">
+              <button
+                onClick={() => { playHapticSound('tab'); setActiveTab('explore'); }}
+                className={`py-2 rounded-lg transition ${
+                  activeTab === 'explore'
+                    ? 'bg-white text-emerald-800 shadow-xs border border-emerald-200/60'
+                    : 'hover:text-emerald-900'
+                }`}
+              >
+                探す・参加 ({displayedApps.length})
+              </button>
+              <button
+                id="guide-tab-joined"
+                onClick={() => { 
+                  playHapticSound('tab'); 
+                  setActiveTab('joined');
+                  if (tutorialStep === 2) setTutorialStep(3);
+                }}
+                className={`py-2 rounded-lg transition ${
+                  activeTab === 'joined'
+                    ? 'bg-white text-emerald-800 shadow-xs border border-emerald-200/60'
+                    : 'hover:text-emerald-900'
+                } ${tutorialStep === 2 ? 'ring-2 ring-amber-400 animate-pulse' : ''}`}
+              >
+                参加中・14日管理 ({myTests.length})
+              </button>
+              <button
+                onClick={() => { playHapticSound('tab'); setActiveTab('my_apps'); }}
+                className={`py-2 rounded-lg transition ${
+                  activeTab === 'my_apps'
+                    ? 'bg-white text-emerald-800 shadow-xs border border-emerald-200/60'
+                    : 'hover:text-emerald-900'
+                }`}
+              >
+                自分の案件 ({myCreatedApps.length})
+              </button>
+            </div>
 
-                  return (
-                    <div key={t.id} className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs space-y-3">
-                      <div className="flex justify-between items-start">
+            {/* タブ1: 募集中のアプリ一覧 */}
+            {activeTab === 'explore' && (
+              <div className="space-y-3 pt-1">
+                {isLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                    <Loader2 className="w-6 h-6 animate-spin text-emerald-600 mb-2" />
+                    <p className="text-xs">アプリを読み込み中...</p>
+                  </div>
+                ) : (
+                  displayedApps.map((app) => {
+                    const isDemo = app.id === -999;
+                    const progress = Math.min(100, Math.round((app.current_testers / app.required_testers) * 100));
+                    const isJoined = myTests.some((t) => t.app_id === app.id);
+                    const isMyCreated = user && app.user_id === user.id;
+
+                    return (
+                      <div
+                        key={app.id}
+                        className={`bg-white rounded-xl p-4 border shadow-xs flex flex-col justify-between transition ${
+                          isDemo ? 'border-emerald-400 ring-2 ring-emerald-200/60 bg-emerald-50/20' : 'border-emerald-100/90 hover:border-emerald-300'
+                        } ${tutorialStep === 1 && isDemo ? 'ring-4 ring-amber-400' : ''}`}
+                      >
                         <div>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                            isCompleted ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-700'
-                          }`}>
-                            {isCompleted ? 'テスト完了・獲得済' : `${days}日目 / 14日間`}
-                          </span>
-                          <h4 className="font-bold text-slate-900 text-sm mt-1">{t.app?.name || 'テストアプリ'}</h4>
-                        </div>
-                        <span className="text-xs font-bold text-emerald-700">+{t.app?.reward_points || REWARD_PER_TEST} pt</span>
-                      </div>
-
-                      <div className="w-full bg-emerald-100/70 h-2 rounded-full overflow-hidden">
-                        <div
-                          className="bg-emerald-500 h-full rounded-full transition-all"
-                          style={{ width: `${Math.min(100, (days / 14) * 100)}%` }}
-                        />
-                      </div>
-
-                      <div className="bg-emerald-50/40 p-3 rounded-lg border border-emerald-100 space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
-                            <Camera className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>テストアプリの画面をスクショしてアップロードしよう！</span>
-                          </p>
-                          {hasScreenshot ? (
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded flex items-center gap-0.5">
-                              <CheckCircle2 className="w-3 h-3" /> 保存済
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded mb-1 ${
+                                isDemo ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              }`}>
+                                {isDemo ? '公式サンプル' : app.category}
+                              </span>
+                              <h3 className="font-bold text-slate-900 text-base">{app.name}</h3>
+                              <p className="text-xs text-slate-500 mt-0.5">{app.developer}</p>
+                            </div>
+                            <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
+                              +{app.reward_points} pt
                             </span>
-                          ) : (
-                            <label className="text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded cursor-pointer transition shadow-2xs">
-                              {uploadingTarget === t.id ? 'アップ中...' : '+ スクショ選択'}
-                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleSingleScreenshotUpload(e, t.id)} />
-                            </label>
-                          )}
+                          </div>
+
+                          <div className="flex flex-wrap gap-1 mb-3">
+                            {app.tags?.map((tag, idx) => (
+                              <span key={idx} className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
                         </div>
 
-                        <div className="flex items-center justify-between pt-1 border-t border-emerald-100/80">
-                          <div className="text-[11px] text-slate-600">
-                            <span className="font-bold">フィードバックメモ:</span>{' '}
-                            {hasReview ? (
-                              <span className="text-emerald-700 font-bold">20文字以上入力済 ✓</span>
-                            ) : (
-                              <span className="text-amber-700">下書き保存中（タップして編集）</span>
-                            )}
+                        <div>
+                          <div className="space-y-1 mb-2.5">
+                            <div className="flex justify-between text-xs text-slate-500 font-medium">
+                              <span className="flex items-center gap-1">
+                                <Users className="w-3.5 h-3.5 text-emerald-600" />
+                                テスター確保状況
+                              </span>
+                              <span>{app.current_testers} / {app.required_testers} 人</span>
+                            </div>
+                            <div className="w-full bg-emerald-100/70 h-2 rounded-full overflow-hidden">
+                              <div
+                                className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
                           </div>
+
                           <button
-                            id="guide-memo-btn"
-                            onClick={() => {
-                              openFeedbackEditor(t);
-                              if (tutorialStep === 3) setTutorialStep(4);
-                            }}
-                            className={`text-xs font-bold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-md transition shadow-2xs flex items-center gap-1 ${tutorialStep === 3 ? 'ring-2 ring-amber-400 animate-pulse' : ''}`}
+                            onClick={() => handleJoinTest(app)}
+                            disabled={Boolean(!isDemo && (isJoined || isMyCreated))}
+                            className={`w-full py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                              isDemo
+                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs active:scale-[0.99]'
+                                : isMyCreated
+                                ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                                : isJoined
+                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-not-allowed'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs active:scale-[0.99]'
+                            }`}
                           >
-                            <MessageSquare className="w-3 h-3" />
-                            <span>{hasReview ? 'メモを確認・編集' : 'メモを書く'}</span>
+                            {isDemo ? (
+                              <>
+                                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                                <span>チュートリアルを体験する（操作ガイド）</span>
+                              </>
+                            ) : isMyCreated ? (
+                              <span>あなたが募集したアプリです</span>
+                            ) : isJoined ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                                <span>現在テスト参加中</span>
+                              </>
+                            ) : (
+                              <>
+                                <Calendar className="w-3.5 h-3.5" />
+                                <span>14日間のテストに参加する</span>
+                                <ExternalLink className="w-3 h-3 ml-0.5" />
+                              </>
+                            )}
                           </button>
                         </div>
                       </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
 
-                      <div className="flex justify-between items-center pt-1 text-xs">
-                        <span className="text-slate-500 text-[11px]">
-                          {isCompleted 
-                            ? '100pt 受取完了！' 
-                            : days >= 14 
-                              ? (hasScreenshot && hasReview ? '14日達成！自動付与完了' : 'スクショまたはメモを完成させてね')
-                              : `あと ${14 - days} 日間スマホに残しておこう！（削除厳禁）`}
-                        </span>
-
-                        {isCompleted ? (
-                          <span className="text-emerald-600 font-bold flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            獲得完了
-                          </span>
-                        ) : (
-                          <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-medium">
-                            キープ中
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          )}
-
-          {/* タブ3: 自分が募集したアプリ */}
-          {activeTab === 'my_apps' && (
-            <div className="space-y-3 pt-1">
-              {myCreatedApps.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-xl border border-emerald-100 text-slate-500 p-6">
-                  <p className="text-xs">あなたが募集中のアプリはありません。</p>
-                  <button
-                    onClick={() => {
-                      playHapticSound('click');
-                      if (!user) {
-                        setIsSignUp(true);
-                        setIsAuthModalOpen(true);
-                      } else {
-                        setIsModalOpen(true);
-                      }
-                    }}
-                    className="mt-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg inline-block transition"
-                  >
-                    案件を新規募集する
-                  </button>
+            {/* タブ2: 参加中 */}
+            {activeTab === 'joined' && (
+              <div className="space-y-3 pt-1">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-emerald-950 shadow-2xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-800">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <span>【みんなでリリース成功を目指すお約束！】</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800 leading-relaxed pl-5">
+                    14日間スマホに残しておこう！（アンインストール・削除は厳禁だよ）。途中で削除すると獲得ポイントが無効になっちゃうので気をつけてね！
+                  </p>
                 </div>
-              ) : (
-                myCreatedApps.map((app) => (
-                  <div key={app.id} className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-sm">{app.name}</h4>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          テスター確保: <span className="text-emerald-600 font-bold">{app.current_testers}</span> / {app.required_testers} 人
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteMyApp(app)}
-                        className="text-slate-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition"
-                        title="募集を取り消してポイント返還"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
 
+                {myTests.length === 0 ? (
+                  <div className="text-center py-12 bg-white rounded-xl border border-emerald-100 text-slate-500 p-6">
+                    <p className="text-xs">現在参加中のテストはありません。</p>
                     <button
-                      onClick={() => handleCopyReviewText(app.id)}
-                      className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                      onClick={() => { playHapticSound('tab'); setActiveTab('explore'); }}
+                      className="mt-3 text-xs text-emerald-600 font-bold hover:underline inline-block"
                     >
-                      <Copy className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>審査申請用フィードバックをコピー</span>
+                      募集中のアプリを探す →
                     </button>
                   </div>
-                ))
-              )}
-            </div>
-          )}
+                ) : (
+                  myTests.map((t) => {
+                    const days = getDaysPassed(t.started_at);
+                    const isCompleted = t.status === 'completed';
+                    const hasScreenshot = Boolean(t.screenshot_day1);
+                    const hasReview = (t.good_points?.length || 0) >= 20 && (t.improvements?.length || 0) >= 20;
 
-        </div>
+                    return (
+                      <div key={t.id} className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                              isCompleted ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-700'
+                            }`}>
+                              {isCompleted ? 'テスト完了・獲得済' : `${days}日目 / 14日間`}
+                            </span>
+                            <h4 className="font-bold text-slate-900 text-sm mt-1">{t.app?.name || 'テストアプリ'}</h4>
+                          </div>
+                          <span className="text-xs font-bold text-emerald-700">+{t.app?.reward_points || REWARD_PER_TEST} pt</span>
+                        </div>
+
+                        <div className="w-full bg-emerald-100/70 h-2 rounded-full overflow-hidden">
+                          <div
+                            className="bg-emerald-500 h-full rounded-full transition-all"
+                            style={{ width: `${Math.min(100, (days / 14) * 100)}%` }}
+                          />
+                        </div>
+
+                        <div className="bg-emerald-50/40 p-3 rounded-lg border border-emerald-100 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                              <Camera className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>テストアプリの画面をスクショしてアップロードしよう！</span>
+                            </p>
+                            {hasScreenshot ? (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded flex items-center gap-0.5">
+                                <CheckCircle2 className="w-3 h-3" /> 保存済
+                              </span>
+                            ) : (
+                              <label className="text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded cursor-pointer transition shadow-2xs">
+                                {uploadingTarget === t.id ? 'アップ中...' : '+ スクショ選択'}
+                                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleSingleScreenshotUpload(e, t.id)} />
+                              </label>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1 border-t border-emerald-100/80">
+                            <div className="text-[11px] text-slate-600">
+                              <span className="font-bold">フィードバックメモ:</span>{' '}
+                              {hasReview ? (
+                                <span className="text-emerald-700 font-bold">20文字以上入力済 ✓</span>
+                              ) : (
+                                <span className="text-amber-700">下書き保存中（タップして編集）</span>
+                              )}
+                            </div>
+                            <button
+                              id="guide-memo-btn"
+                              onClick={() => {
+                                openFeedbackEditor(t);
+                                if (tutorialStep === 3) setTutorialStep(4);
+                              }}
+                              className={`text-xs font-bold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-md transition shadow-2xs flex items-center gap-1 ${tutorialStep === 3 ? 'ring-2 ring-amber-400 animate-pulse' : ''}`}
+                            >
+                              <MessageSquare className="w-3 h-3" />
+                              <span>{hasReview ? 'メモを確認・編集' : 'メモを書く'}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-1 text-xs">
+                          <span className="text-slate-500 text-[11px]">
+                            {isCompleted 
+                              ? '100pt 受取完了！' 
+                              : days >= 14 
+                                ? (hasScreenshot && hasReview ? '14日達成！自動付与完了' : 'スクショまたはメモを完成させてね')
+                                : `あと ${14 - days} 日間スマホに残しておこう！（削除厳禁）`}
+                          </span>
+
+                          {isCompleted ? (
+                            <span className="text-emerald-600 font-bold flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              獲得完了
+                            </span>
+                          ) : (
+                            <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-medium">
+                              キープ中
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* タブ3: 自分が募集したアプリ */}
+            {activeTab === 'my_apps' && (
+              <div className="space-y-3 pt-1">
+                {myCreatedApps.length === 0 ? (
+                  <div className="text-center py-12 bg-white rounded-xl border border-emerald-100 text-slate-500 p-6">
+                    <p className="text-xs">あなたが募集中のアプリはありません。</p>
+                    <button
+                      onClick={() => {
+                        playHapticSound('click');
+                        if (!user) {
+                          setIsSignUp(true);
+                          setIsAuthModalOpen(true);
+                        } else {
+                          setIsModalOpen(true);
+                        }
+                      }}
+                      className="mt-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg inline-block transition"
+                    >
+                      案件を新規募集する
+                    </button>
+                  </div>
+                ) : (
+                  myCreatedApps.map((app) => (
+                    <div key={app.id} className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-bold text-slate-900 text-sm">{app.name}</h4>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            テスター確保: <span className="text-emerald-600 font-bold">{app.current_testers}</span> / {app.required_testers} 人
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteMyApp(app)}
+                          className="text-slate-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition"
+                          title="募集を取り消してポイント返還"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => handleCopyReviewText(app.id)}
+                        className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>審査申請用フィードバックをコピー</span>
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+          </div>
+        )}
       </div>
 
-      {/* ポケモン風 インタラクティブ・テスポガイド（画面下部に常駐） */}
+      {/* ポケモン風 インタラクティブガイド（常駐） */}
       {tutorialStep !== null && (
         <div className="sticky bottom-4 z-40 max-w-md mx-auto px-4 animate-in slide-in-from-bottom duration-300">
           <div className="bg-white border-2 border-emerald-500 rounded-2xl p-3.5 shadow-2xl flex items-start gap-3">
-            {/* テスポスライム アイコン */}
             <div className="w-10 h-10 flex-shrink-0 animate-bounce">
               <svg className="w-full h-full text-emerald-500 fill-emerald-400 drop-shadow-xs" viewBox="0 0 100 100">
                 <path d="M50 15 C25 15, 12 45, 12 70 C12 88, 28 92, 50 92 C72 92, 88 88, 88 70 C88 45, 75 15, 50 15 Z" />
@@ -1221,7 +1393,6 @@ export default function Home() {
               </svg>
             </div>
 
-            {/* ガイド台詞 */}
             <div className="flex-1 text-xs text-slate-800 space-y-1">
               <div className="flex justify-between items-center">
                 <span className="font-extrabold text-emerald-700 text-[11px] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -1295,12 +1466,12 @@ export default function Home() {
         <p>© テスターズフィールド (Testers Field) - 個人開発者のGoogle Playクローズドテスト相互プラットフォーム</p>
         <p className="text-[10px] text-slate-400">Google Play および Android は Google LLC の商標です。</p>
         <div className="flex justify-center items-center gap-4 text-xs text-slate-500 pt-1">
-          <button onClick={() => { playHapticSound('tab'); setActiveManualModal('terms'); }} className="hover:underline">
-            利用規約
+          <button onClick={() => navigateToView('guide_tester')} className="hover:underline">
+            参加ガイド
           </button>
           <span>•</span>
-          <button onClick={() => { playHapticSound('tab'); setActiveManualModal('about'); }} className="hover:underline">
-            サービス概要
+          <button onClick={() => navigateToView('guide_dev')} className="hover:underline">
+            募集ガイド
           </button>
           <span>•</span>
           <a href="https://forms.gle/3sTTB61MrBeghMTd6" target="_blank" rel="noopener noreferrer" className="hover:underline">
@@ -1639,80 +1810,6 @@ export default function Home() {
                 {isSubmitting ? '登録中...' : '1,500 pt で募集する'}
               </button>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* 各種ガイドモーダル */}
-      {activeManualModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl p-5 shadow-xl max-h-[85vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-base">
-                {activeManualModal === 'about' && 'テスターズフィールドの設計思想'}
-                {activeManualModal === 'dev' && '審査申請手順（Play Console連携）'}
-                {activeManualModal === 'multi' && '他社ツール併用＆複数グループ登録ガイド'}
-                {activeManualModal === 'faq' && '審査落ちを防ぐための必須FAQ'}
-                {activeManualModal === 'terms' && '利用規約 / 14日間維持のルール'}
-              </h3>
-              <button onClick={() => { playHapticSound('click'); setActiveManualModal(null); }} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {activeManualModal === 'about' && (
-              <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
-                <p><strong className="text-slate-900">審査官を納得させる「証拠」を自動生成：</strong><br />Google Playの審査では「テスターを集めたか」だけでなく「フィードバックを得て修正したか」が厳しく問われます。テスポは20文字以上の具体的な意見を必須にし、Play Consoleにそのまま貼れるレポートをワンタップで作成します。</p>
-                <p><strong className="text-slate-900">相互テストの煩わしさをゼロに：</strong><br />「お返しのプレッシャー」やDMでの個別対応を廃止。共通ポイントプールで自律的に助け合う仕組みです。</p>
-              </div>
-            )}
-
-            {activeManualModal === 'dev' && (
-              <div className="space-y-2 text-xs text-slate-600 leading-relaxed">
-                <p>1. Play Console &gt; クローズドテスト &gt; テスターに <span className="font-mono text-emerald-700 font-bold">{GOOGLE_GROUP_EMAIL}</span> を追加</p>
-                <p>2. Webテスター参加リンクを取得してテスポに投稿</p>
-                <p>3. 14日経過後、「審査申請用フィードバックをコピー」ボタンでエビデンスを生成し、Consoleの申請フォームに貼り付けて本番公開を申請</p>
-              </div>
-            )}
-
-            {activeManualModal === 'multi' && (
-              <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
-                <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-200">
-                  <p className="font-bold text-emerald-900 mb-1">Q. すでに他社グループや自前のリストがあるけど併用できる？</p>
-                  <p className="text-emerald-800">
-                    <strong>A. 完全に併用可能です。</strong> Google Play Consoleは「メールリスト（グループ）」を複数追加できる仕様になっています。既存のグループを残したまま、テスポのグループ（<code>{GOOGLE_GROUP_EMAIL}</code>）を追加するだけで、テスターの確保枠を倍増できます。
-                  </p>
-                </div>
-                <p>
-                  Google審査は「誰がどこから参加したか」ではなく、**「全ルート合計で12人以上が14日間維持したか」**だけを見ています。他社ツールで途中で離脱された場合の保険としてテスポを併用するのが一番安全です。
-                </p>
-              </div>
-            )}
-
-            {activeManualModal === 'faq' && (
-              <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
-                <div>
-                  <h4 className="font-bold text-slate-900 mb-0.5">Q. テスターが途中でアンインストールしたらどうなる？</h4>
-                  <p>A. Googleの14日連続カウントがリセットされてしまいます。テスポではこれを防ぐため、14日間の維持を相互の約束とし、途中で削除した場合はポイント付与を無効としています。</p>
-                </div>
-                <div>
-                  <h4 className="font-bold text-slate-900 mb-0.5">Q. なぜ12人ではなく15人枠で募集するの？</h4>
-                  <p>A. 不慮の端末不調などに備え、余裕を持った15名体制で確実に審査条件（12人）をクリアするためです。</p>
-                </div>
-                <div>
-                  <h4 className="font-bold text-slate-900 mb-0.5">Q. フィードバックの自動レポートはどう使うの？</h4>
-                  <p>A. 14日達成後、Google Play Consoleで本番公開を申請する際、「テスターから得たフィードバックとそれに対する修正対応」を入力する欄があります。「審査申請用フィードバックをコピー」を押してそのまま貼り付けてください。</p>
-                </div>
-              </div>
-            )}
-
-            {activeManualModal === 'terms' && (
-              <div className="space-y-2 text-xs text-slate-600 leading-relaxed">
-                <p className="text-emerald-700 font-bold">・参加したアプリは「14日間スマホに残しておくこと（アンインストール・削除は厳禁）」を相互のルールとしています。途中で削除すると獲得ポイントが無効になる可能性があります。</p>
-                <p>・無意味な文字列やAI自動生成など、著しく不誠実なフィードバックは無効化されます。</p>
-                <p>・当サービスはGoogle LLCとの提携関係にはありません。審査通過を保証するものではありません。</p>
-              </div>
-            )}
           </div>
         </div>
       )}
