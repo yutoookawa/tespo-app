@@ -26,16 +26,13 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  Heart,
   ShieldCheck,
-  Zap,
-  Flame,
   Layers
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 
-// --- Web Audio API（統一された「トンッ」という心地よいタップ音） ---
+// --- Web Audio API（歯切れの良いメカニカル・プチプチ触感クリック ＆ みずみずしいスライム音） ---
 let sharedAudioCtx: AudioContext | null = null;
 
 const getAudioContext = () => {
@@ -48,8 +45,8 @@ const getAudioContext = () => {
   return sharedAudioCtx;
 };
 
-// 「トンッ」という深みのある打楽器・Switch風UI音
-const playTonSound = async (volumeBoost = 1.0) => {
+// 集中力を削がない、クリスピーで心地よい触感サウンド
+const playTactileSound = async (type: 'click' | 'slime' = 'click') => {
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
@@ -58,25 +55,53 @@ const playTonSound = async (volumeBoost = 1.0) => {
       await ctx.resume();
     }
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
     const now = ctx.currentTime;
 
-    // 「トンッ」と響く周波数エンベロープ（160Hzから70Hzへ急速降下）
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(160, now);
-    osc.frequency.exponentialRampToValueAtTime(70, now + 0.05);
+    if (type === 'slime') {
+      // みずみずしく「ポヨッ！」と弾けるスライムサウンド（2重倍音）
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
 
-    // パンチのあるアタックと短いディケイ
-    const peakGain = 0.85 * volumeBoost;
-    gain.gain.setValueAtTime(peakGain, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
 
-    osc.start(now);
-    osc.stop(now + 0.07);
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(380, now);
+      osc1.frequency.exponentialRampToValueAtTime(880, now + 0.06);
+      osc1.frequency.exponentialRampToValueAtTime(480, now + 0.16);
+
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(760, now);
+      osc2.frequency.exponentialRampToValueAtTime(1200, now + 0.05);
+      osc2.frequency.exponentialRampToValueAtTime(600, now + 0.14);
+
+      gain.gain.setValueAtTime(0.7, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 0.18);
+      osc2.stop(now + 0.18);
+    } else {
+      // 乾いたメカニカルクリック／プチプチ触感音（高域クリア＆超短ディケイ）
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1250, now);
+      osc.frequency.exponentialRampToValueAtTime(380, now + 0.035);
+
+      gain.gain.setValueAtTime(0.75, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+
+      osc.start(now);
+      osc.stop(now + 0.035);
+    }
   } catch {
     // AudioContext エラーハンドリング
   }
@@ -287,19 +312,19 @@ export default function Home() {
   };
 
   const markGroupAsJoined = () => {
-    playTonSound(1.2);
+    playTactileSound('click');
     setIsGroupJoinedState(true);
     localStorage.setItem('tf_group_joined', 'true');
   };
 
   const handleSlimeClick = () => {
-    playTonSound(1.3);
+    playTactileSound('slime');
     setIsSlimeBouncing(true);
     setTimeout(() => setIsSlimeBouncing(false), 500);
   };
 
   const navigateToView = (view: 'home' | 'vision' | 'guide_tester' | 'guide_dev' | 'guide_multi') => {
-    playTonSound(1.0);
+    playTactileSound('click');
     setIsMenuOpen(false);
     setCurrentView(view);
     if (typeof window !== 'undefined') {
@@ -338,7 +363,7 @@ export default function Home() {
             points: INITIAL_POINTS 
           }]);
           markGroupAsJoined();
-          playTonSound(1.2);
+          playTactileSound('click');
           alert('🎉 登録完了！初回募集用の 1,500 pt をプレゼントしたよ！自分のアプリもすぐ募集できるよ！');
         }
       } else {
@@ -347,7 +372,7 @@ export default function Home() {
           password: authPassword,
         });
         if (error) throw error;
-        playTonSound(1.0);
+        playTactileSound('click');
       }
       setIsAuthModalOpen(false);
       fetchData();
@@ -361,7 +386,7 @@ export default function Home() {
   };
 
   const handleSignOut = async () => {
-    playTonSound(1.0);
+    playTactileSound('click');
     await supabase.auth.signOut();
     setUser(null);
     setUsername('');
@@ -422,7 +447,7 @@ export default function Home() {
         setApps([data[0], ...apps]);
       }
 
-      playTonSound(1.2);
+      playTactileSound('click');
       setName('');
       setTagsInput('');
       setTestUrl('');
@@ -437,7 +462,7 @@ export default function Home() {
   };
 
   const handleDeleteMyApp = async (app: AppItem) => {
-    playTonSound(1.0);
+    playTactileSound('click');
     if (!confirm(`「${app.name}」の募集を取り下げますか？\n集まっていない枠のポイント（未募集分）は全額返還されます。`)) return;
 
     try {
@@ -454,7 +479,7 @@ export default function Home() {
       setUserPoints(nextPoints);
       setApps(apps.filter((a) => a.id !== app.id));
 
-      playTonSound(1.2);
+      playTactileSound('click');
       alert(`募集を取り下げました。${refundPoints} pt が返還されました。`);
     } catch {
       alert('削除に失敗しました。');
@@ -462,9 +487,8 @@ export default function Home() {
   };
 
   const handleJoinTest = async (app: AppItem) => {
-    playTonSound(1.0);
+    playTactileSound('click');
 
-    // 公式サンプル案件はチュートリアル起動（ステップ1：新規登録へ）
     if (app.id === -999) {
       setTutorialStep(1);
       return;
@@ -505,7 +529,7 @@ export default function Home() {
       await supabase.from('apps').update({ current_testers: updatedCount }).eq('id', app.id);
       setApps(apps.map((a) => (a.id === app.id ? { ...a, current_testers: updatedCount } : a)));
 
-      playTonSound(1.2);
+      playTactileSound('click');
       if (app.test_url) {
         window.open(app.test_url, '_blank', 'noopener,noreferrer');
       }
@@ -519,7 +543,7 @@ export default function Home() {
     if (!file) return;
 
     setUploadingTarget(participationId);
-    playTonSound(1.0);
+    playTactileSound('click');
 
     try {
       const fileExt = file.name.split('.').pop();
@@ -533,7 +557,7 @@ export default function Home() {
       await supabase.from('test_participations').update({ screenshot_day1: publicUrlData.publicUrl }).eq('id', participationId);
 
       setMyTests(myTests.map((t) => t.id === participationId ? { ...t, screenshot_day1: publicUrlData.publicUrl } : t));
-      playTonSound(1.2);
+      playTactileSound('click');
       alert('テストアプリの画面スクショを保存したよ！');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'エラー';
@@ -544,7 +568,7 @@ export default function Home() {
   };
 
   const openFeedbackEditor = (t: Participation) => {
-    playTonSound(1.0);
+    playTactileSound('click');
     setActiveEditingTest(t);
     setDeviceModel(t.device_model || '');
     setOsVersion(t.os_version || 'Android 14');
@@ -559,7 +583,7 @@ export default function Home() {
     if (!activeEditingTest || !user) return;
 
     setFeedbackSubmitting(true);
-    playTonSound(1.0);
+    playTactileSound('click');
 
     try {
       const days = getDaysPassed(activeEditingTest.started_at);
@@ -585,10 +609,10 @@ export default function Home() {
         const nextPoints = userPoints + REWARD_PER_TEST;
         await supabase.from('profiles').update({ points: nextPoints }).eq('id', user.id);
         setUserPoints(nextPoints);
-        playTonSound(1.2);
+        playTactileSound('click');
         alert(`🎉 14日間キープ達成！\n報酬として ${REWARD_PER_TEST} pt を付与したよ！`);
       } else {
-        playTonSound(1.2);
+        playTactileSound('click');
         alert('感想メモを保存したよ！14日間いつでも書き直せるよ。');
       }
 
@@ -612,7 +636,7 @@ export default function Home() {
   };
 
   const handleCopyReviewText = (appId: number) => {
-    playTonSound(1.0);
+    playTactileSound('click');
     const feedbacks = allParticipations.filter((p) => p.app_id === appId && p.good_points && p.good_points.length >= 20);
     if (feedbacks.length === 0) {
       alert('まだ集まったフィードバックがありません。');
@@ -633,12 +657,12 @@ export default function Home() {
     report += `\n■ テスト結果を踏まえた対応策:\n上記のフィードバックに基づき、UIデザインの調整および安定性向上の修正アップデートを実施しました。`;
 
     navigator.clipboard.writeText(report);
-    playTonSound(1.2);
+    playTactileSound('click');
     alert('📋 Play Console 審査用の回答テキストをコピーしました！申請画面に貼り付けてご利用ください。');
   };
 
   const handleShareOnX = () => {
-    playTonSound(1.0);
+    playTactileSound('click');
     const shareText = `Google Playの14日間クローズドテスト、テスターズフィールド（テスポ）で進行中！\n相互テストで15人確保＆審査用の感想レポートも自動作成できる無料Webです🤝\n#個人開発 #GooglePlay #Androidアプリ開発`;
     const shareUrl = "https://tespo-app.vercel.app";
     const twitterIntent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`;
@@ -656,7 +680,7 @@ export default function Home() {
           <div className="max-w-md mx-auto flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <button 
-                onClick={() => { playTonSound(); setIsMenuOpen(true); }}
+                onClick={() => { playTactileSound('click'); setIsMenuOpen(true); }}
                 className="p-1 -ml-1 text-slate-600 hover:text-emerald-700 rounded-lg hover:bg-emerald-50 transition"
                 title="メニューを開く"
               >
@@ -707,7 +731,7 @@ export default function Home() {
                 <button
                   id="guide-auth-btn"
                   onClick={() => {
-                    playTonSound();
+                    playTactileSound('click');
                     setIsSignUp(true);
                     setIsAuthModalOpen(true);
                   }}
@@ -720,7 +744,7 @@ export default function Home() {
 
               <button
                 onClick={() => {
-                  playTonSound();
+                  playTactileSound('click');
                   setFormError('');
                   if (!user) {
                     setIsSignUp(true);
@@ -738,7 +762,7 @@ export default function Home() {
           </div>
         </header>
 
-        {/* ドロワーメニュー（「図解」表記を撤去＆テスポのこだわりを追加） */}
+        {/* ドロワーメニュー */}
         {isMenuOpen && (
           <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex">
             <div className="bg-white w-80 h-full border-r border-slate-200 shadow-2xl flex flex-col justify-between p-5 animate-in slide-in-from-left duration-200 overflow-y-auto">
@@ -748,13 +772,12 @@ export default function Home() {
                     <span className="text-emerald-600 font-extrabold text-base">テスポ</span>
                     <span>ガイド＆メニュー</span>
                   </div>
-                  <button onClick={() => { playTonSound(); setIsMenuOpen(false); }} className="text-slate-400 hover:text-slate-600 p-1">
+                  <button onClick={() => { playTactileSound('click'); setIsMenuOpen(false); }} className="text-slate-400 hover:text-slate-600 p-1">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
 
                 <div className="space-y-2">
-                  {/* ★新設：テスポのこだわり・価値訴求 */}
                   <button
                     onClick={() => navigateToView('vision')}
                     className="w-full p-3.5 rounded-xl border-2 border-emerald-400 bg-emerald-50/50 hover:bg-emerald-100/50 transition flex items-center justify-between text-left group shadow-xs"
@@ -813,10 +836,10 @@ export default function Home() {
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Xでサービスをシェア</span>
                 </button>
-                <p className="text-[10px] text-slate-400 text-center font-mono">TestersField Core v2.7</p>
+                <p className="text-[10px] text-slate-400 text-center font-mono">TestersField Core v2.8</p>
               </div>
             </div>
-            <div className="flex-1" onClick={() => { playTonSound(); setIsMenuOpen(false); }} />
+            <div className="flex-1" onClick={() => { playTactileSound('click'); setIsMenuOpen(false); }} />
           </div>
         )}
 
@@ -844,7 +867,6 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* こだわり1 */}
               <div className="border border-emerald-200 bg-emerald-50/30 rounded-xl p-3.5 space-y-1.5">
                 <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-900">
                   <Award className="w-4 h-4 text-emerald-600" />
@@ -855,7 +877,6 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* こだわり2 */}
               <div className="border border-blue-200 bg-blue-50/30 rounded-xl p-3.5 space-y-1.5">
                 <div className="flex items-center gap-1.5 font-bold text-xs text-blue-900">
                   <ShieldCheck className="w-4 h-4 text-blue-600" />
@@ -866,7 +887,6 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* こだわり3 */}
               <div className="border border-purple-200 bg-purple-50/30 rounded-xl p-3.5 space-y-1.5">
                 <div className="flex items-center gap-1.5 font-bold text-xs text-purple-900">
                   <Layers className="w-4 h-4 text-purple-600" />
@@ -877,7 +897,6 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* こだわり4 */}
               <div className="border border-amber-200 bg-amber-50/30 rounded-xl p-3.5 space-y-1.5">
                 <div className="flex items-center gap-1.5 font-bold text-xs text-amber-900">
                   <Sparkles className="w-4 h-4 text-amber-600" />
@@ -1064,7 +1083,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ホーム画面 */}
+        {/* 通常ホーム画面 */}
         {currentView === 'home' && (
           <div className="max-w-md mx-auto px-4 pt-3 space-y-3">
             
@@ -1102,7 +1121,7 @@ export default function Home() {
 
             <div className="bg-white rounded-xl border border-emerald-100 overflow-hidden shadow-2xs">
               <button
-                onClick={() => { playTonSound(); setIsGuideOpen(!isGuideOpen); }}
+                onClick={() => { playTactileSound('click'); setIsGuideOpen(!isGuideOpen); }}
                 className="w-full px-3.5 py-2 text-xs font-bold text-slate-700 flex items-center justify-between hover:bg-emerald-50/40 transition"
               >
                 <span className="flex items-center gap-1.5 text-emerald-800">
@@ -1134,7 +1153,7 @@ export default function Home() {
 
             <div className="grid grid-cols-3 gap-1 bg-emerald-100/60 p-1 rounded-xl text-xs font-bold text-slate-600">
               <button
-                onClick={() => { playTonSound(); setActiveTab('explore'); }}
+                onClick={() => { playTactileSound('click'); setActiveTab('explore'); }}
                 className={`py-2 rounded-lg transition ${
                   activeTab === 'explore'
                     ? 'bg-white text-emerald-800 shadow-xs border border-emerald-200/60'
@@ -1146,7 +1165,7 @@ export default function Home() {
               <button
                 id="guide-tab-joined"
                 onClick={() => { 
-                  playTonSound(); 
+                  playTactileSound('click'); 
                   setActiveTab('joined');
                   if (tutorialStep === 2) setTutorialStep(3);
                 }}
@@ -1159,7 +1178,7 @@ export default function Home() {
                 参加中・14日管理 ({myTests.length})
               </button>
               <button
-                onClick={() => { playTonSound(); setActiveTab('my_apps'); }}
+                onClick={() => { playTactileSound('click'); setActiveTab('my_apps'); }}
                 className={`py-2 rounded-lg transition ${
                   activeTab === 'my_apps'
                     ? 'bg-white text-emerald-800 shadow-xs border border-emerald-200/60'
@@ -1290,7 +1309,7 @@ export default function Home() {
                   <div className="text-center py-12 bg-white rounded-xl border border-emerald-100 text-slate-500 p-6">
                     <p className="text-xs">現在参加中のテストはありません。</p>
                     <button
-                      onClick={() => { playTonSound(); setActiveTab('explore'); }}
+                      onClick={() => { playTactileSound('click'); setActiveTab('explore'); }}
                       className="mt-3 text-xs text-emerald-600 font-bold hover:underline inline-block"
                     >
                       募集中のアプリを探す →
@@ -1399,7 +1418,7 @@ export default function Home() {
                     <p className="text-xs">あなたが募集中のアプリはありません。</p>
                     <button
                       onClick={() => {
-                        playTonSound();
+                        playTactileSound('click');
                         if (!user) {
                           setIsSignUp(true);
                           setIsAuthModalOpen(true);
@@ -1448,7 +1467,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* ポケモン風 インタラクティブガイド（ステップ1を新規登録に是正） */}
+      {/* ポケモン風 インタラクティブガイド */}
       {tutorialStep !== null && (
         <div className="sticky bottom-4 z-40 max-w-md mx-auto px-4 animate-in slide-in-from-bottom duration-300">
           <div className="bg-white border-2 border-emerald-500 rounded-2xl p-3.5 shadow-2xl flex items-start gap-3">
@@ -1469,7 +1488,7 @@ export default function Home() {
                   テスポのナビゲーション [{tutorialStep}/4]
                 </span>
                 <button 
-                  onClick={() => { playTonSound(); setTutorialStep(null); }}
+                  onClick={() => { playTactileSound('click'); setTutorialStep(null); }}
                   className="text-slate-400 hover:text-slate-600 p-0.5"
                 >
                   <X className="w-4 h-4" />
@@ -1501,7 +1520,7 @@ export default function Home() {
                 {tutorialStep === 1 && !user ? (
                   <button
                     onClick={() => {
-                      playTonSound(1.2);
+                      playTactileSound('click');
                       setIsSignUp(true);
                       setIsAuthModalOpen(true);
                     }}
@@ -1512,7 +1531,7 @@ export default function Home() {
                 ) : tutorialStep < 4 ? (
                   <button
                     onClick={() => {
-                      playTonSound();
+                      playTactileSound('click');
                       setTutorialStep(tutorialStep + 1);
                       if (tutorialStep === 2) setActiveTab('joined');
                     }}
@@ -1524,7 +1543,7 @@ export default function Home() {
                 ) : (
                   <button
                     onClick={() => {
-                      playTonSound(1.2);
+                      playTactileSound('click');
                       setTutorialStep(null);
                       setIsModalOpen(true);
                     }}
@@ -1575,7 +1594,7 @@ export default function Home() {
                   </p>
                 )}
               </div>
-              <button onClick={() => { playTonSound(); setIsAuthModalOpen(false); }} className="text-slate-400 hover:text-slate-600 p-1">
+              <button onClick={() => { playTactileSound('click'); setIsAuthModalOpen(false); }} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1606,7 +1625,7 @@ export default function Home() {
                   <input
                     type="checkbox"
                     checked={hasJoinedGroup}
-                    onChange={(e) => { playTonSound(); setHasJoinedGroup(e.target.checked); }}
+                    onChange={(e) => { playTactileSound('click'); setHasJoinedGroup(e.target.checked); }}
                     className="mt-0.5 rounded border-slate-300 text-emerald-600"
                   />
                   <span>公式グループへの参加を完了しました</span>
@@ -1671,7 +1690,7 @@ export default function Home() {
             <div className="mt-3 text-center">
               <button
                 onClick={() => {
-                  playTonSound();
+                  playTactileSound('click');
                   setIsSignUp(!isSignUp);
                   setAuthError('');
                 }}
@@ -1693,7 +1712,7 @@ export default function Home() {
                 <h3 className="font-bold text-slate-900 text-base">感想・改善メモ（随時保存）</h3>
                 <p className="text-[11px] text-slate-500">気付いた点をメモしておくと、14日経過時に自動で審査用レポートになります</p>
               </div>
-              <button onClick={() => { playTonSound(); setIsFeedbackModalOpen(false); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { playTactileSound('click'); setIsFeedbackModalOpen(false); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1793,20 +1812,20 @@ export default function Home() {
                   消費: <span className="text-emerald-600 font-bold">{REQUIRED_POINTS_FOR_POST} pt</span> (保有残高: {userPoints} pt)
                 </p>
               </div>
-              <button onClick={() => { playTonSound(); setIsModalOpen(false); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { playTactileSound('click'); setIsModalOpen(false); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="mb-3 bg-emerald-50/50 border border-emerald-200 rounded-lg p-2.5 text-xs text-slate-700">
-              <span className="font-bold block mb-1 text-slate-900">⚠️ 投稿前の確認</span>
+              <span className="font-bold block mb-1 text-slate-900">⚠️️ 投稿前の確認</span>
               Play Consoleのテスター欄に下記グループアドレスを追加してください：
               <div className="mt-1 flex items-center justify-between bg-white border border-emerald-200 rounded px-2 py-1 text-[11px] text-emerald-800 font-mono">
                 <span>{GOOGLE_GROUP_EMAIL}</span>
                 <button
                   type="button"
                   onClick={() => {
-                    playTonSound();
+                    playTactileSound('click');
                     navigator.clipboard.writeText(GOOGLE_GROUP_EMAIL);
                     alert('グループアドレスをコピーしました！Consoleに貼り付けてください。');
                   }}
