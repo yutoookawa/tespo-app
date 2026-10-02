@@ -1,0 +1,40 @@
+{
+  "project_name": "Testers Field (テスターズフィールド)",
+  "version": "1.2.2",
+  "updated_at": "2026-09-20",
+  "tech_stack": {
+    "framework": "Next.js (App Router)",
+    "language": "TypeScript",
+    "styling": "Tailwind CSS",
+    "backend": "Supabase (PostgreSQL / Auth / Storage)",
+    "hosting": "Vercel"
+  },
+  "core_rules": {
+    "fixed_testers": 15,
+    "reward_per_test": 100,
+    "cost_per_app": 1500,
+    "feedback_min_chars": 20,
+    "google_group_url": "https://groups.google.com/g/testers-field",
+    "google_group_email": "testers-field@googlegroups.com"
+  },
+  "important_specs": [
+    "フィードバックの文字数バリデーション（良い点・改善点各20文字以上）",
+    "新規登録時の公式Googleグループ参加必須チェックボックス",
+    "Google Play Console審査提出用テキストの自動生成コピペ機能",
+    "ファーストビュー圧縮＆3タブ切り替え（募集中・参加中・自作案件）"
+  ],
+  "future_enhancements": [
+    "フッターおよび新規登録モーダルへの利用規約リンク常設",
+    "Googleグループ参加済フラグの保持とバナー表示の自動切替",
+    "案件0件時の公式サンプルチュートリアル案件常設"
+  ],
+  "monetization_plan": [
+    "ポイント直接販売パッケージ（テスト時間を短縮したい開発者向け / 1500pt等の販売）",
+    "案件のトップピックアップ優先表示オプション",
+    "開発者向けツール・サービスの紹介アフィリエイトおよび広告枠"
+  ],
+  "marketing_strategy": {
+    "short_form_video": "TikTok/Reels/Shorts用 30秒バズ台本（煽り→視聴維持→結論→これがこう！→簡潔CTA）",
+    "direct_approach": "X・Discordでのクローズドテスト困窮者へのGive先行型アプローチ"
+  }
+}
