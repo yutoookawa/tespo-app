@@ -17,26 +17,25 @@ import {
   Copy, 
   MessageSquare, 
   Menu, 
-  BookOpen, 
   Share2, 
   ChevronRight, 
   ArrowLeft,
   Award, 
   Save, 
-  Layers, 
   ArrowRight,
-  ShieldCheck,
-  Check
+  Check,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 
-// --- Web Audio API（シングルトン化：連打による音詰まりを根絶 & 音量ブースト） ---
+// --- Web Audio API（シングルトン化：連打による音詰まりを防止 & 音量ブースト） ---
 let sharedAudioCtx: AudioContext | null = null;
 
 const getAudioContext = () => {
   if (typeof window === 'undefined') return null;
-  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+  const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextClass) return null;
   if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
     sharedAudioCtx = new AudioContextClass();
@@ -61,7 +60,6 @@ const playHapticSound = async (type: 'click' | 'success' | 'tab' | 'slime' = 'cl
     const now = ctx.currentTime;
 
     if (type === 'slime') {
-      // 弾力スライム音
       osc.type = 'sine';
       osc.frequency.setValueAtTime(340, now);
       osc.frequency.exponentialRampToValueAtTime(820, now + 0.08);
@@ -71,7 +69,6 @@ const playHapticSound = async (type: 'click' | 'success' | 'tab' | 'slime' = 'cl
       osc.start(now);
       osc.stop(now + 0.22);
     } else if (type === 'click') {
-      // はっきり聴こえる操作クリック音（音量0.8にブースト）
       osc.type = 'sine';
       osc.frequency.setValueAtTime(880, now);
       osc.frequency.exponentialRampToValueAtTime(280, now + 0.05);
@@ -80,7 +77,6 @@ const playHapticSound = async (type: 'click' | 'success' | 'tab' | 'slime' = 'cl
       osc.start(now);
       osc.stop(now + 0.05);
     } else if (type === 'tab') {
-      // タブ切り替え
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(560, now);
       osc.frequency.exponentialRampToValueAtTime(840, now + 0.06);
@@ -89,7 +85,6 @@ const playHapticSound = async (type: 'click' | 'success' | 'tab' | 'slime' = 'cl
       osc.start(now);
       osc.stop(now + 0.06);
     } else if (type === 'success') {
-      // 完了チャイム
       osc.type = 'sine';
       osc.frequency.setValueAtTime(523.25, now);
       osc.frequency.setValueAtTime(659.25, now + 0.08);
@@ -98,7 +93,9 @@ const playHapticSound = async (type: 'click' | 'success' | 'tab' | 'slime' = 'cl
       osc.start(now);
       osc.stop(now + 0.28);
     }
-  } catch (e) {}
+  } catch {
+    // AudioContext エラーハンドリング
+  }
 };
 
 interface AppItem {
@@ -161,7 +158,7 @@ export default function Home() {
   const [allParticipations, setAllParticipations] = useState<Participation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // メイン画面とメニュー詳細ビューの切り替え ('home' | 'guide_tester' | 'guide_dev' | 'guide_multi')
+  // 画面ビュー切替 ('home' | 'guide_tester' | 'guide_dev' | 'guide_multi')
   const [currentView, setCurrentView] = useState<'home' | 'guide_tester' | 'guide_dev' | 'guide_multi'>('home');
   const [activeTab, setActiveTab] = useState<'explore' | 'joined' | 'my_apps'>('explore');
   const [isGroupJoinedState, setIsGroupJoinedState] = useState(false);
@@ -250,7 +247,9 @@ export default function Home() {
         setUsername(data.username || '開発者');
         setUserPoints(data.points ?? 0);
       }
-    } catch (err) {}
+    } catch {
+      // プロファイル取得エラー無視
+    }
   };
 
   const getDaysPassed = (startDate: string) => {
@@ -299,7 +298,8 @@ export default function Home() {
         const localJoined = JSON.parse(localStorage.getItem('tespo_joined_ids') || '[]');
         setMyTests((partData || []).filter((p) => localJoined.includes(p.id)));
       }
-    } catch (err) {
+    } catch {
+      // データ取得エラー
     } finally {
       setIsLoading(false);
     }
@@ -321,7 +321,9 @@ export default function Home() {
     playHapticSound('tab');
     setIsMenuOpen(false);
     setCurrentView(view);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -368,8 +370,9 @@ export default function Home() {
       }
       setIsAuthModalOpen(false);
       fetchData();
-    } catch (err: any) {
-      setAuthError(err.message || '認証エラーが発生しました');
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : '認証エラーが発生しました';
+      setAuthError(errorMsg);
     } finally {
       setAuthLoading(false);
     }
@@ -443,8 +446,9 @@ export default function Home() {
       setTestUrl('');
       setIsModalOpen(false);
       setActiveTab('my_apps');
-    } catch (err: any) {
-      setFormError('募集の投稿に失敗しました: ' + err.message);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : '投稿に失敗しました';
+      setFormError('募集の投稿に失敗しました: ' + errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -470,7 +474,7 @@ export default function Home() {
 
       playHapticSound('success');
       alert(`募集を取り下げました。${refundPoints} pt が返還されました。`);
-    } catch (err) {
+    } catch {
       alert('削除に失敗しました。');
     }
   };
@@ -522,7 +526,7 @@ export default function Home() {
       if (app.test_url) {
         window.open(app.test_url, '_blank', 'noopener,noreferrer');
       }
-    } catch (err) {
+    } catch {
       alert('参加処理でエラーが発生しました');
     }
   };
@@ -548,8 +552,9 @@ export default function Home() {
       setMyTests(myTests.map((t) => t.id === participationId ? { ...t, screenshot_day1: publicUrlData.publicUrl } : t));
       playHapticSound('success');
       alert('テストアプリの画面スクショを保存したよ！');
-    } catch (err: any) {
-      alert('アップロード失敗: ' + err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'エラー';
+      alert('アップロード失敗: ' + msg);
     } finally {
       setUploadingTarget(null);
     }
@@ -615,8 +620,9 @@ export default function Home() {
       } : t));
 
       setIsFeedbackModalOpen(false);
-    } catch (err: any) {
-      alert('保存エラー: ' + err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'エラー';
+      alert('保存エラー: ' + msg);
     } finally {
       setFeedbackSubmitting(false);
     }
@@ -749,7 +755,7 @@ export default function Home() {
           </div>
         </header>
 
-        {/* ハンバーガーメニュー（簡潔でタップしやすいリスト） */}
+        {/* ドロワーメニュー */}
         {isMenuOpen && (
           <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex">
             <div className="bg-white w-80 h-full border-r border-slate-200 shadow-2xl flex flex-col justify-between p-5 animate-in slide-in-from-left duration-200 overflow-y-auto">
@@ -764,7 +770,6 @@ export default function Home() {
                   </button>
                 </div>
 
-                {/* 3つの明確な画面遷移メニュー */}
                 <div className="space-y-2">
                   <button
                     onClick={() => navigateToView('guide_tester')}
@@ -819,7 +824,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* 画面遷移パターン①：テスター参加図解ビュー */}
+        {/* 画面遷移①：テスター参加図解 */}
         {currentView === 'guide_tester' && (
           <div className="max-w-md mx-auto px-4 py-4 space-y-4 animate-in fade-in duration-150">
             <button
@@ -837,7 +842,6 @@ export default function Home() {
               </h2>
 
               <div className="space-y-4 text-xs text-slate-700">
-                {/* STEP 1 */}
                 <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2">
                   <span className="font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded text-[10px]">STEP 1</span>
                   <h3 className="font-bold text-slate-900">公式Googleグループに参加する</h3>
@@ -847,7 +851,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* STEP 2 */}
                 <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2">
                   <span className="font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded text-[10px]">STEP 2</span>
                   <h3 className="font-bold text-slate-900">アプリをインストールして14日間残す</h3>
@@ -857,7 +860,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* STEP 3 */}
                 <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2">
                   <span className="font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded text-[10px]">STEP 3</span>
                   <h3 className="font-bold text-slate-900">スクショ1枚＆感想メモで自動完了！</h3>
@@ -878,7 +880,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* 画面遷移パターン②：開発者募集＆審査申請図解ビュー */}
+        {/* 画面遷移②：自作アプリ募集＆審査申請図解 */}
         {currentView === 'guide_dev' && (
           <div className="max-w-md mx-auto px-4 py-4 space-y-4 animate-in fade-in duration-150">
             <button
@@ -938,7 +940,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* 画面遷移パターン③：他社ツール併用図解ビュー */}
+        {/* 画面遷移③：他社ツール併用図解 */}
         {currentView === 'guide_multi' && (
           <div className="max-w-md mx-auto px-4 py-4 space-y-4 animate-in fade-in duration-150">
             <button
@@ -988,11 +990,10 @@ export default function Home() {
           </div>
         )}
 
-        {/* 通常のホーム画面 */}
+        {/* ホーム画面 */}
         {currentView === 'home' && (
           <div className="max-w-md mx-auto px-4 pt-3 space-y-3">
             
-            {/* 保有ポイント ＆ グループ参加ステータス */}
             <div className="bg-gradient-to-r from-emerald-600 to-teal-700 rounded-xl p-3 text-white shadow-sm flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="bg-white/20 p-2 rounded-lg backdrop-blur-xs">
@@ -1025,7 +1026,6 @@ export default function Home() {
               )}
             </div>
 
-            {/* 3ステップ使い方ガイド */}
             <div className="bg-white rounded-xl border border-emerald-100 overflow-hidden shadow-2xs">
               <button
                 onClick={() => { playHapticSound('tab'); setIsGuideOpen(!isGuideOpen); }}
@@ -1058,7 +1058,6 @@ export default function Home() {
               )}
             </div>
 
-            {/* タブナビゲーション */}
             <div className="grid grid-cols-3 gap-1 bg-emerald-100/60 p-1 rounded-xl text-xs font-bold text-slate-600">
               <button
                 onClick={() => { playHapticSound('tab'); setActiveTab('explore'); }}
@@ -1097,7 +1096,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* タブ1: 募集中のアプリ一覧 */}
             {activeTab === 'explore' && (
               <div className="space-y-3 pt-1">
                 {isLoading ? (
@@ -1202,7 +1200,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* タブ2: 参加中 */}
             {activeTab === 'joined' && (
               <div className="space-y-3 pt-1">
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-emerald-950 shadow-2xs space-y-1">
@@ -1321,7 +1318,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* タブ3: 自分が募集したアプリ */}
             {activeTab === 'my_apps' && (
               <div className="space-y-3 pt-1">
                 {myCreatedApps.length === 0 ? (
@@ -1378,7 +1374,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* ポケモン風 インタラクティブガイド（常駐） */}
+      {/* ポケモン風 インタラクティブガイド */}
       {tutorialStep !== null && (
         <div className="sticky bottom-4 z-40 max-w-md mx-auto px-4 animate-in slide-in-from-bottom duration-300">
           <div className="bg-white border-2 border-emerald-500 rounded-2xl p-3.5 shadow-2xl flex items-start gap-3">
