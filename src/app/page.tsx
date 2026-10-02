@@ -56,51 +56,35 @@ const playTactileSound = async (type: 'click' | 'slime' = 'click') => {
     }
 
     const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
 
     if (type === 'slime') {
-      // みずみずしく「ポヨッ！」と弾けるスライムサウンド（2重倍音）
-      const osc1 = ctx.createOscillator();
-      const osc2 = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(380, now);
-      osc1.frequency.exponentialRampToValueAtTime(880, now + 0.06);
-      osc1.frequency.exponentialRampToValueAtTime(480, now + 0.16);
-
-      osc2.type = 'triangle';
-      osc2.frequency.setValueAtTime(760, now);
-      osc2.frequency.exponentialRampToValueAtTime(1200, now + 0.05);
-      osc2.frequency.exponentialRampToValueAtTime(600, now + 0.14);
+      // 濁りのない、水滴が弾けるような「ぽよん」とした爽快スライム音
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(420, now);
+      osc.frequency.exponentialRampToValueAtTime(780, now + 0.05);
+      osc.frequency.exponentialRampToValueAtTime(320, now + 0.14);
 
       gain.gain.setValueAtTime(0.7, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-
-      osc1.start(now);
-      osc2.start(now);
-      osc1.stop(now + 0.18);
-      osc2.stop(now + 0.18);
-    } else {
-      // 乾いたメカニカルクリック／プチプチ触感音（高域クリア＆超短ディケイ）
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1250, now);
-      osc.frequency.exponentialRampToValueAtTime(380, now + 0.035);
-
-      gain.gain.setValueAtTime(0.75, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
 
       osc.start(now);
-      osc.stop(now + 0.035);
+      osc.stop(now + 0.16);
+    } else {
+      // 耳に刺さらない、落ち着いた「プチッ / ポチッ」触感クリック音（850Hz -> 280Hz）
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(850, now);
+      osc.frequency.exponentialRampToValueAtTime(280, now + 0.038);
+
+      gain.gain.setValueAtTime(0.7, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.038);
+
+      osc.start(now);
+      osc.stop(now + 0.038);
     }
   } catch {
     // AudioContext エラーハンドリング
