@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
   PlusCircle, 
-  Smartphone, 
   Users, 
   Sparkles, 
   X, 
@@ -32,13 +31,19 @@ import {
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 
-// --- Web Audio API 音量を強化した触感サウンド ---
-const playHapticSound = (type: 'click' | 'success' | 'tab' = 'click') => {
+// --- Web Audio API（サスペンド自動復帰 ＆ 音量・ぷよん音追加） ---
+const playHapticSound = async (type: 'click' | 'success' | 'tab' | 'slime' = 'click') => {
   if (typeof window === 'undefined') return;
   try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+
+    // ブラウザの省電力スリープ復帰
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
@@ -46,33 +51,43 @@ const playHapticSound = (type: 'click' | 'success' | 'tab' = 'click') => {
     gain.connect(ctx.destination);
     const now = ctx.currentTime;
 
-    if (type === 'click') {
-      // 乾いた心地よいクリック音（音量を0.12→0.28に強化）
+    if (type === 'slime') {
+      // ぷよん！という弾力スライム音
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(850, now);
-      osc.frequency.exponentialRampToValueAtTime(350, now + 0.04);
-      gain.gain.setValueAtTime(0.28, now);
+      osc.frequency.setValueAtTime(320, now);
+      osc.frequency.exponentialRampToValueAtTime(780, now + 0.08);
+      osc.frequency.exponentialRampToValueAtTime(450, now + 0.16);
+      gain.gain.setValueAtTime(0.4, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc.start(now);
+      osc.stop(now + 0.18);
+    } else if (type === 'click') {
+      // 乾いた心地よいクリック（音量0.38にブースト）
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(900, now);
+      osc.frequency.exponentialRampToValueAtTime(300, now + 0.04);
+      gain.gain.setValueAtTime(0.38, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
       osc.start(now);
       osc.stop(now + 0.04);
     } else if (type === 'tab') {
       // タブ切り替えのスナップ音
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(500, now);
-      osc.frequency.exponentialRampToValueAtTime(800, now + 0.05);
-      gain.gain.setValueAtTime(0.2, now);
+      osc.frequency.setValueAtTime(550, now);
+      osc.frequency.exponentialRampToValueAtTime(850, now + 0.05);
+      gain.gain.setValueAtTime(0.28, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
       osc.start(now);
       osc.stop(now + 0.05);
     } else if (type === 'success') {
-      // 完了・承認時の上品なチャイム音
+      // 承認・受取時のチャイム
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(523.25, now); // C5
-      osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
-      gain.gain.setValueAtTime(0.3, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.frequency.setValueAtTime(523.25, now);
+      osc.frequency.setValueAtTime(659.25, now + 0.08);
+      gain.gain.setValueAtTime(0.38, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
       osc.start(now);
-      osc.stop(now + 0.22);
+      osc.stop(now + 0.24);
     }
   } catch (e) {
     // AudioContext制限対策
@@ -142,10 +157,10 @@ export default function Home() {
   const [allParticipations, setAllParticipations] = useState<Participation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 表示タブ: 'explore' = 案件を探す, 'joined' = 参加中(14日維持), 'my_apps' = 自分の募集
   const [activeTab, setActiveTab] = useState<'explore' | 'joined' | 'my_apps'>('explore');
   const [isGroupJoinedState, setIsGroupJoinedState] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [isSlimeBouncing, setIsSlimeBouncing] = useState(false);
   
   // モーダル
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -269,6 +284,13 @@ export default function Home() {
     localStorage.setItem('tf_group_joined', 'true');
   };
 
+  // スライム（テスポ）をタップしたときのアクション
+  const handleSlimeClick = () => {
+    playHapticSound('slime');
+    setIsSlimeBouncing(true);
+    setTimeout(() => setIsSlimeBouncing(false), 500);
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
@@ -308,7 +330,7 @@ export default function Home() {
           }]);
           markGroupAsJoined();
           playHapticSound('success');
-          alert('🎉 登録が完了しました！初回募集用の 1,500 pt をプレゼントしました！');
+          alert('🎉 登録完了しました！初回募集用の 1,500 pt をプレゼントしました！');
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -585,38 +607,55 @@ export default function Home() {
   const myCreatedApps = user ? apps.filter((a) => a.user_id === user.id) : [];
   const displayedApps = apps.length > 0 ? apps : [DEMO_SAMPLE_APP];
 
-  // 参加中アプリの最大経過日数
-  const activeStreak = myTests.length > 0 
-    ? Math.max(...myTests.map(t => getDaysPassed(t.started_at)))
-    : 0;
-
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-between font-sans">
       <div>
-        {/* ヘッダー: 清潔感のあるホワイト＆ライト境界 */}
-        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-2.5 shadow-xs">
+        {/* ヘッダー: スマホマーク撤去 ＆ テスポスライム配置 */}
+        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-emerald-100 px-4 py-2.5 shadow-xs">
           <div className="max-w-md mx-auto flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <button 
                 onClick={() => { playHapticSound('tab'); setIsMenuOpen(true); }}
-                className="p-1 -ml-1 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition"
+                className="p-1 -ml-1 text-slate-600 hover:text-emerald-700 rounded-lg hover:bg-emerald-50 transition"
                 title="メニューを開く"
               >
                 <Menu className="w-5 h-5" />
               </button>
-              <div className="flex items-center gap-1.5 font-bold text-sm text-slate-900">
-                <Smartphone className="w-5 h-5 text-emerald-600" />
-                <span>テスターズフィールド</span>
-                <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-normal border border-emerald-200">
-                  テスポ
-                </span>
+
+              {/* ぷよんと跳ねるテスポスライム */}
+              <div 
+                onClick={handleSlimeClick}
+                className="flex items-center gap-1.5 cursor-pointer select-none group"
+                title="タップしてね！"
+              >
+                <div className={`relative transition-transform duration-300 ${isSlimeBouncing ? 'scale-125 -translate-y-1' : 'group-hover:scale-110 active:scale-95'}`}>
+                  {/* スライム本体（SVG） */}
+                  <svg className="w-7 h-7 text-emerald-500 fill-emerald-400 drop-shadow-xs" viewBox="0 0 100 100">
+                    <path d="M50 15 C25 15, 12 45, 12 70 C12 88, 28 92, 50 92 C72 92, 88 88, 88 70 C88 45, 75 15, 50 15 Z" />
+                    {/* つぶらな目 */}
+                    <circle cx="38" cy="55" r="5" fill="#064e3b" />
+                    <circle cx="62" cy="55" r="5" fill="#064e3b" />
+                    <circle cx="40" cy="53" r="1.5" fill="#ffffff" />
+                    <circle cx="64" cy="53" r="1.5" fill="#ffffff" />
+                    {/* にっこり口 */}
+                    <path d="M44 68 Q50 74 56 68" stroke="#064e3b" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+                  </svg>
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-extrabold text-sm text-slate-900 tracking-tight leading-none group-hover:text-emerald-600 transition">
+                    テスターズフィールド
+                  </span>
+                  <span className="text-[10px] text-emerald-700 font-bold leading-tight mt-0.5">
+                    テスポ
+                  </span>
+                </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               {user ? (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-1 rounded-full max-w-[90px] truncate">
+                  <span className="text-xs font-semibold text-slate-700 bg-emerald-50/60 border border-emerald-200 px-2 py-1 rounded-full max-w-[90px] truncate">
                     {username}
                   </span>
                   <button
@@ -634,7 +673,7 @@ export default function Home() {
                     setIsSignUp(true);
                     setIsAuthModalOpen(true);
                   }}
-                  className="text-xs text-emerald-700 hover:bg-emerald-50 border border-emerald-200 bg-white px-2.5 py-1.5 rounded-full font-semibold transition shadow-2xs"
+                  className="text-xs text-emerald-700 hover:bg-emerald-50 border border-emerald-300 bg-emerald-50/40 px-2.5 py-1.5 rounded-full font-bold transition shadow-2xs"
                 >
                   <LogIn className="w-3 h-3 inline mr-1 text-emerald-600" />
                   <span>登録 / ログイン</span>
@@ -655,7 +694,7 @@ export default function Home() {
                 className="flex items-center space-x-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-full transition shadow-xs active:scale-95"
               >
                 <PlusCircle className="w-3.5 h-3.5" />
-                <span>案件を募集</span>
+                <span>募集</span>
               </button>
             </div>
           </div>
@@ -668,16 +707,15 @@ export default function Home() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
-                    <Smartphone className="w-5 h-5 text-emerald-600" />
-                    <span>テスターズフィールド</span>
+                    <span className="text-emerald-600 font-extrabold">テスポ</span>
+                    <span>公式メニュー</span>
                   </div>
                   <button onClick={() => { playHapticSound('click'); setIsMenuOpen(false); }} className="text-slate-400 hover:text-slate-600 p-1">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
 
-                {/* 他社併用・バックアップ安心ガイド */}
-                <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 text-xs space-y-1.5">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs space-y-1.5">
                   <div className="flex items-center gap-1 text-emerald-800 font-bold text-[11px]">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                     <span>他社ツール（TestCrew等）との併用</span>
@@ -690,21 +728,21 @@ export default function Home() {
                 <div className="space-y-1 text-xs font-medium text-slate-700">
                   <button
                     onClick={() => { playHapticSound('click'); setIsMenuOpen(false); setActiveManualModal('about'); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-slate-100 transition text-left"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-emerald-50/60 hover:text-emerald-700 transition text-left"
                   >
                     <Info className="w-4 h-4 text-emerald-600" />
                     <span>テスターズフィールドとは？</span>
                   </button>
                   <button
                     onClick={() => { playHapticSound('click'); setIsMenuOpen(false); setActiveManualModal('dev'); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-slate-100 transition text-left"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-emerald-50/60 hover:text-emerald-700 transition text-left"
                   >
                     <BookOpen className="w-4 h-4 text-emerald-600" />
                     <span>開発者マニュアル（審査申請手順）</span>
                   </button>
                   <button
                     onClick={() => { playHapticSound('click'); setIsMenuOpen(false); setActiveManualModal('terms'); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-slate-100 transition text-left"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-emerald-50/60 hover:text-emerald-700 transition text-left"
                   >
                     <FileText className="w-4 h-4 text-emerald-600" />
                     <span>利用規約 / ルール</span>
@@ -715,12 +753,12 @@ export default function Home() {
               <div className="pt-4 border-t border-slate-100 space-y-2">
                 <button
                   onClick={handleShareOnX}
-                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-xs"
+                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-xs"
                 >
-                  <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <Share2 className="w-3.5 h-3.5" />
                   <span>Xでサービスをシェア</span>
                 </button>
-                <p className="text-[10px] text-slate-400 text-center">Version 2.1 (ライト＆高視認性)</p>
+                <p className="text-[10px] text-slate-400 text-center">Version 2.2</p>
               </div>
             </div>
             <div className="flex-1" onClick={() => { playHapticSound('click'); setIsMenuOpen(false); }} />
@@ -729,55 +767,24 @@ export default function Home() {
 
         <div className="max-w-md mx-auto px-4 pt-3 space-y-3">
           
-          {/* ジム風「14日間テスト管理ボード」 */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs relative overflow-hidden">
-            <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2.5">
-              <div className="flex items-center gap-1.5">
-                <Activity className="w-4 h-4 text-emerald-600" />
-                <span className="text-xs font-bold text-slate-900">あなたのテスト活動・進捗</span>
-              </div>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                14日オプトイン追跡中
-              </span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
-                <p className="text-[10px] font-semibold text-slate-500">保有ポイント</p>
-                <p className="text-lg font-bold text-slate-900 mt-0.5">{userPoints.toLocaleString()}<span className="text-[10px] font-normal text-slate-500 ml-0.5">pt</span></p>
-              </div>
-              <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
-                <p className="text-[10px] font-semibold text-slate-500">最長継続日数</p>
-                <p className="text-lg font-bold text-emerald-600 mt-0.5">{activeStreak}<span className="text-[10px] font-normal text-slate-500 ml-0.5">/14日</span></p>
-              </div>
-              <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
-                <p className="text-[10px] font-semibold text-slate-500">参加中アプリ</p>
-                <p className="text-lg font-bold text-slate-900 mt-0.5">{myTests.length}<span className="text-[10px] font-normal text-slate-500 ml-0.5">件</span></p>
-              </div>
-            </div>
-
-            <div className="mt-3 flex items-center justify-between text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200/60">
-              <span className="flex items-center gap-1.5">
-                <Flame className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                <span>15名確保で離脱があっても審査条件（12人）を安全突破！</span>
-              </span>
-            </div>
-          </div>
-
-          {/* 公式Googleグループ参加カード（初見で一番迷うポイントを解消） */}
-          <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between shadow-2xs">
+          {/* コンパクト化：保有ポイント ＆ グループ参加ステータス */}
+          <div className="bg-gradient-to-r from-emerald-600 to-teal-700 rounded-xl p-3 text-white shadow-sm flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className={`w-2.5 h-2.5 rounded-full ${isGroupJoinedState ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-              <div className="text-xs">
-                <p className="font-bold text-slate-900">公式Googleグループ（参加必須）</p>
-                <p className="text-[11px] text-slate-500">参加しないとPlayストアでエラーが出ます</p>
+              <div className="bg-white/20 p-2 rounded-lg backdrop-blur-xs">
+                <Sparkles className="w-5 h-5 text-amber-300" />
+              </div>
+              <div>
+                <p className="text-[11px] text-emerald-100 font-medium leading-none">保有ポイント</p>
+                <p className="text-xl font-extrabold mt-1 leading-none flex items-baseline gap-0.5">
+                  {userPoints.toLocaleString()} <span className="text-[10px] font-normal text-emerald-200">pt</span>
+                </p>
               </div>
             </div>
 
             {isGroupJoinedState ? (
-              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                参加済み
+              <span className="text-xs font-bold text-white bg-white/20 border border-white/30 px-3 py-1.5 rounded-lg flex items-center gap-1 backdrop-blur-xs">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                グループ参加済
               </span>
             ) : (
               <a
@@ -785,21 +792,21 @@ export default function Home() {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={markGroupAsJoined}
-                className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg transition shadow-xs flex items-center gap-1"
+                className="text-xs font-bold text-emerald-800 bg-white hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition shadow-xs flex items-center gap-1"
               >
-                <span>参加する（無料）</span>
-                <ExternalLink className="w-3 h-3" />
+                <span>必須：グループ参加</span>
+                <ExternalLink className="w-3 h-3 text-emerald-600" />
               </a>
             )}
           </div>
 
-          {/* 3ステップ使い方ガイド（初心者向け開閉式） */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+          {/* 3ステップ使い方ガイド */}
+          <div className="bg-white rounded-xl border border-emerald-100 overflow-hidden shadow-2xs">
             <button
               onClick={() => { playHapticSound('tab'); setIsGuideOpen(!isGuideOpen); }}
-              className="w-full px-3.5 py-2.5 text-xs font-bold text-slate-700 flex items-center justify-between hover:bg-slate-50 transition"
+              className="w-full px-3.5 py-2 text-xs font-bold text-slate-700 flex items-center justify-between hover:bg-emerald-50/40 transition"
             >
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5 text-emerald-800">
                 <Award className="w-4 h-4 text-emerald-600" />
                 <span>初めての方へ：テスポの全体の流れ</span>
               </span>
@@ -809,7 +816,7 @@ export default function Home() {
               </span>
             </button>
             {isGuideOpen && (
-              <div className="px-3.5 pb-3.5 pt-1 text-[11px] text-slate-600 border-t border-slate-100 bg-slate-50/50 space-y-2">
+              <div className="px-3.5 pb-3 pt-1 text-[11px] text-slate-600 border-t border-emerald-100 bg-emerald-50/20 space-y-1.5">
                 <div className="flex items-start gap-2">
                   <span className="w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
                   <p><strong>公式Googleグループに参加</strong>（実機のPlayストアと同じGoogleアカウント）</p>
@@ -826,14 +833,14 @@ export default function Home() {
             )}
           </div>
 
-          {/* 分かりやすい日本語タブナビゲーション */}
-          <div className="grid grid-cols-3 gap-1 bg-slate-200/70 p-1 rounded-xl text-xs font-bold text-slate-600">
+          {/* 分かりやすいタブナビゲーション（緑を強調） */}
+          <div className="grid grid-cols-3 gap-1 bg-emerald-100/60 p-1 rounded-xl text-xs font-bold text-slate-600">
             <button
               onClick={() => { playHapticSound('tab'); setActiveTab('explore'); }}
               className={`py-2 rounded-lg transition ${
                 activeTab === 'explore'
-                  ? 'bg-white text-emerald-700 shadow-xs'
-                  : 'hover:text-slate-900'
+                  ? 'bg-white text-emerald-800 shadow-xs border border-emerald-200/60'
+                  : 'hover:text-emerald-900'
               }`}
             >
               探す・参加 ({displayedApps.length})
@@ -842,8 +849,8 @@ export default function Home() {
               onClick={() => { playHapticSound('tab'); setActiveTab('joined'); }}
               className={`py-2 rounded-lg transition ${
                 activeTab === 'joined'
-                  ? 'bg-white text-emerald-700 shadow-xs'
-                  : 'hover:text-slate-900'
+                  ? 'bg-white text-emerald-800 shadow-xs border border-emerald-200/60'
+                  : 'hover:text-emerald-900'
               }`}
             >
               参加中・14日管理 ({myTests.length})
@@ -852,8 +859,8 @@ export default function Home() {
               onClick={() => { playHapticSound('tab'); setActiveTab('my_apps'); }}
               className={`py-2 rounded-lg transition ${
                 activeTab === 'my_apps'
-                  ? 'bg-white text-emerald-700 shadow-xs'
-                  : 'hover:text-slate-900'
+                  ? 'bg-white text-emerald-800 shadow-xs border border-emerald-200/60'
+                  : 'hover:text-emerald-900'
               }`}
             >
               自分の案件 ({myCreatedApps.length})
@@ -882,21 +889,21 @@ export default function Home() {
                     <div
                       key={app.id}
                       className={`bg-white rounded-xl p-4 border shadow-xs flex flex-col justify-between transition ${
-                        isDemo ? 'border-emerald-300 ring-1 ring-emerald-200' : 'border-slate-200 hover:border-slate-300'
+                        isDemo ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-emerald-100/90 hover:border-emerald-300'
                       }`}
                     >
                       <div>
                         <div className="flex justify-between items-start mb-2">
                           <div>
                             <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded mb-1 ${
-                              isDemo ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                              isDemo ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             }`}>
                               {isDemo ? '公式サンプル' : app.category}
                             </span>
                             <h3 className="font-bold text-slate-900 text-base">{app.name}</h3>
                             <p className="text-xs text-slate-500 mt-0.5">{app.developer}</p>
                           </div>
-                          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
+                          <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
                             +{app.reward_points} pt
                           </span>
                         </div>
@@ -914,12 +921,12 @@ export default function Home() {
                         <div className="space-y-1 mb-2.5">
                           <div className="flex justify-between text-xs text-slate-500 font-medium">
                             <span className="flex items-center gap-1">
-                              <Users className="w-3.5 h-3.5 text-slate-400" />
+                              <Users className="w-3.5 h-3.5 text-emerald-600" />
                               テスター確保状況
                             </span>
                             <span>{app.current_testers} / {app.required_testers} 人</span>
                           </div>
-                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                          <div className="w-full bg-emerald-100/70 h-2 rounded-full overflow-hidden">
                             <div
                               className="bg-emerald-500 h-full rounded-full transition-all duration-300"
                               style={{ width: `${progress}%` }}
@@ -936,7 +943,7 @@ export default function Home() {
                               : isMyCreated
                               ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                               : isJoined
-                              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-not-allowed'
                               : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs active:scale-[0.99]'
                           }`}
                         >
@@ -972,7 +979,7 @@ export default function Home() {
           {activeTab === 'joined' && (
             <div className="space-y-3 pt-1">
               {myTests.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-500 p-6">
+                <div className="text-center py-12 bg-white rounded-xl border border-emerald-100 text-slate-500 p-6">
                   <p className="text-xs">現在参加中のテストはありません。</p>
                   <button
                     onClick={() => { playHapticSound('tab'); setActiveTab('explore'); }}
@@ -988,7 +995,7 @@ export default function Home() {
                   const isCompleted = t.status === 'completed';
 
                   return (
-                    <div key={t.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
+                    <div key={t.id} className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs space-y-3">
                       <div className="flex justify-between items-start">
                         <div>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
@@ -1001,20 +1008,20 @@ export default function Home() {
                         <span className="text-xs font-bold text-emerald-700">+{t.app?.reward_points || REWARD_PER_TEST} pt</span>
                       </div>
 
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                      <div className="w-full bg-emerald-100/70 h-2 rounded-full overflow-hidden">
                         <div
                           className="bg-emerald-500 h-full rounded-full transition-all"
                           style={{ width: `${Math.min(100, (days / 14) * 100)}%` }}
                         />
                       </div>
 
-                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <div className="bg-emerald-50/40 p-3 rounded-lg border border-emerald-100">
                         <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5 mb-2">
                           <Camera className="w-3.5 h-3.5 text-emerald-600" />
                           <span>起動証明スクショ提出（ステータスバーの時計必須）</span>
                         </p>
                         <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
-                          <label className="border border-dashed border-slate-300 rounded p-2 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
+                          <label className="border border-dashed border-emerald-300 rounded p-2 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
                             <span className="font-medium text-slate-600">1日目（開始）</span>
                             {t.screenshot_day1 ? (
                               <span className="text-emerald-600 font-bold mt-1">提出済 ✓</span>
@@ -1026,7 +1033,7 @@ export default function Home() {
                             <input type="file" accept="image/*" className="hidden" onChange={(e) => handleScreenshotUpload(e, t.id, 'day1')} />
                           </label>
 
-                          <label className="border border-dashed border-slate-300 rounded p-2 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
+                          <label className="border border-dashed border-emerald-300 rounded p-2 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
                             <span className="font-medium text-slate-600">7日目（中間）</span>
                             {t.screenshot_day7 ? (
                               <span className="text-emerald-600 font-bold mt-1">提出済 ✓</span>
@@ -1038,7 +1045,7 @@ export default function Home() {
                             <input type="file" accept="image/*" className="hidden" onChange={(e) => handleScreenshotUpload(e, t.id, 'day7')} />
                           </label>
 
-                          <label className="border border-dashed border-slate-300 rounded p-2 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
+                          <label className="border border-dashed border-emerald-300 rounded p-2 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
                             <span className="font-medium text-slate-600">14日目（完遂）</span>
                             {t.screenshot_day14 ? (
                               <span className="text-emerald-600 font-bold mt-1">提出済 ✓</span>
@@ -1095,7 +1102,7 @@ export default function Home() {
           {activeTab === 'my_apps' && (
             <div className="space-y-3 pt-1">
               {myCreatedApps.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-500 p-6">
+                <div className="text-center py-12 bg-white rounded-xl border border-emerald-100 text-slate-500 p-6">
                   <p className="text-xs">あなたが募集中のアプリはありません。</p>
                   <button
                     onClick={() => {
@@ -1114,7 +1121,7 @@ export default function Home() {
                 </div>
               ) : (
                 myCreatedApps.map((app) => (
-                  <div key={app.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
+                  <div key={app.id} className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
                         <h4 className="font-bold text-slate-900 text-sm">{app.name}</h4>
@@ -1185,7 +1192,7 @@ export default function Home() {
             </div>
 
             {isSignUp && (
-              <div className="mb-4 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-2">
+              <div className="mb-4 bg-emerald-50/50 border border-emerald-200 rounded-xl p-3 text-xs space-y-2">
                 <p className="font-bold text-slate-900 flex items-center gap-1 text-[11px]">
                   <Users className="w-3.5 h-3.5 text-emerald-600" />
                   STEP 1: 公式Googleグループに参加（必須）
@@ -1206,7 +1213,7 @@ export default function Home() {
                   公式グループに参加する（無料）
                 </a>
 
-                <label className="flex items-start gap-2 text-slate-800 text-[11px] font-semibold cursor-pointer pt-1 bg-white p-2 rounded border border-slate-200">
+                <label className="flex items-start gap-2 text-slate-800 text-[11px] font-semibold cursor-pointer pt-1 bg-white p-2 rounded border border-emerald-200">
                   <input
                     type="checkbox"
                     checked={hasJoinedGroup}
@@ -1399,10 +1406,10 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="mb-3 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-700">
+            <div className="mb-3 bg-emerald-50/50 border border-emerald-200 rounded-lg p-2.5 text-xs text-slate-700">
               <span className="font-bold block mb-1 text-slate-900">⚠️ 投稿前の確認</span>
               Play Consoleのテスター欄に下記グループアドレスを追加してください：
-              <div className="mt-1 flex items-center justify-between bg-white border border-slate-200 rounded px-2 py-1 text-[11px] text-emerald-800 font-mono">
+              <div className="mt-1 flex items-center justify-between bg-white border border-emerald-200 rounded px-2 py-1 text-[11px] text-emerald-800 font-mono">
                 <span>{GOOGLE_GROUP_EMAIL}</span>
                 <button
                   type="button"
