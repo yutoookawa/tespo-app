@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   PlusCircle, 
-  Terminal, 
+  Smartphone, 
   Users, 
   Sparkles, 
   X, 
@@ -27,55 +27,52 @@ import {
   ChevronUp,
   FileText,
   Activity,
-  Zap,
-  TrendingUp
+  Award
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 
-// --- Web Audio API 周波数合成ハプティック音 ---
-const playMinimalClick = (type: 'click' | 'success' | 'tab' = 'click') => {
+// --- Web Audio API 音量を強化した触感サウンド ---
+const playHapticSound = (type: 'click' | 'success' | 'tab' = 'click') => {
   if (typeof window === 'undefined') return;
   try {
     const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContext) return;
     const ctx = new AudioContext();
-
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
     osc.connect(gain);
     gain.connect(ctx.destination);
-
     const now = ctx.currentTime;
 
     if (type === 'click') {
-      // Linear/Macライクな乾いた触感クリック
+      // 乾いた心地よいクリック音（音量を0.12→0.28に強化）
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(800, now);
-      osc.frequency.exponentialRampToValueAtTime(400, now + 0.03);
-      gain.gain.setValueAtTime(0.12, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
-      osc.start(now);
-      osc.stop(now + 0.03);
-    } else if (type === 'tab') {
-      // 軽いスナップ音
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(600, now);
-      osc.frequency.exponentialRampToValueAtTime(900, now + 0.04);
-      gain.gain.setValueAtTime(0.08, now);
+      osc.frequency.setValueAtTime(850, now);
+      osc.frequency.exponentialRampToValueAtTime(350, now + 0.04);
+      gain.gain.setValueAtTime(0.28, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
       osc.start(now);
       osc.stop(now + 0.04);
+    } else if (type === 'tab') {
+      // タブ切り替えのスナップ音
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(500, now);
+      osc.frequency.exponentialRampToValueAtTime(800, now + 0.05);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+      osc.start(now);
+      osc.stop(now + 0.05);
     } else if (type === 'success') {
-      // 上品なデュアルトーン
+      // 完了・承認時の上品なチャイム音
       osc.type = 'sine';
       osc.frequency.setValueAtTime(523.25, now); // C5
-      osc.frequency.setValueAtTime(659.25, now + 0.06); // E5
-      gain.gain.setValueAtTime(0.15, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
       osc.start(now);
-      osc.stop(now + 0.18);
+      osc.stop(now + 0.22);
     }
   } catch (e) {
     // AudioContext制限対策
@@ -125,13 +122,13 @@ const REQUIRED_POINTS_FOR_POST = FIXED_TESTERS * REWARD_PER_TEST;
 
 const DEMO_SAMPLE_APP: AppItem = {
   id: -999,
-  name: "FocusPulse - ミニマル習慣タイマー",
-  category: "生産性",
-  developer: "TestersField Labs",
+  name: "【公式サンプル】タスク管理メモ",
+  category: "ツール",
+  developer: "テスターズフィールド運営",
   required_testers: 15,
   current_testers: 13,
   reward_points: 100,
-  tags: ["公式デモ", "審査直結", "14日間オプトイン"],
+  tags: ["操作体験用", "14日間維持", "審査レポート自動生成"],
   test_url: GOOGLE_GROUP_URL,
   created_at: new Date().toISOString(),
 };
@@ -145,8 +142,10 @@ export default function Home() {
   const [allParticipations, setAllParticipations] = useState<Participation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 表示タブ: 'explore' = 案件を探す, 'joined' = 参加中(14日維持), 'my_apps' = 自分の募集
   const [activeTab, setActiveTab] = useState<'explore' | 'joined' | 'my_apps'>('explore');
   const [isGroupJoinedState, setIsGroupJoinedState] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
   
   // モーダル
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -156,7 +155,7 @@ export default function Home() {
   const [activeManualModal, setActiveManualModal] = useState<'about' | 'dev' | 'tester' | 'terms' | null>(null);
   const [activeCompletingTest, setActiveCompletingTest] = useState<Participation | null>(null);
   
-  // 認証
+  // 認証フォーム
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authUsername, setAuthUsername] = useState('');
@@ -165,7 +164,7 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
 
-  // 案件投稿
+  // 案件投稿フォーム
   const [name, setName] = useState('');
   const [category, setCategory] = useState('ツール');
   const [tagsInput, setTagsInput] = useState('');
@@ -173,7 +172,7 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
-  // フィードバック
+  // レビュー提出フォーム
   const [deviceModel, setDeviceModel] = useState('');
   const [osVersion, setOsVersion] = useState('Android 14');
   const [goodPoints, setGoodPoints] = useState('');
@@ -265,7 +264,7 @@ export default function Home() {
   };
 
   const markGroupAsJoined = () => {
-    playMinimalClick('success');
+    playHapticSound('success');
     setIsGroupJoinedState(true);
     localStorage.setItem('tf_group_joined', 'true');
   };
@@ -278,11 +277,11 @@ export default function Home() {
     try {
       if (isSignUp) {
         if (!authUsername.trim()) {
-          throw new Error('開発者名（ID）を入力してください');
+          throw new Error('お名前（ニックネーム）を入力してください');
         }
 
         if (!hasJoinedGroup) {
-          throw new Error('公式Googleグループへの参加確認チェックを入れてください');
+          throw new Error('公式Googleグループへの参加確認にチェックを入れてください');
         }
 
         const { data: existingUser } = await supabase
@@ -292,7 +291,7 @@ export default function Home() {
           .maybeSingle();
 
         if (existingUser) {
-          throw new Error('この開発者名は既に使用されています。');
+          throw new Error('このお名前は既に使用されています。');
         }
 
         const { data, error } = await supabase.auth.signUp({
@@ -308,8 +307,8 @@ export default function Home() {
             points: INITIAL_POINTS 
           }]);
           markGroupAsJoined();
-          playMinimalClick('success');
-          alert('🚀 アカウント発行完了！初回募集用の 1,500 pt をアクティベートしました。');
+          playHapticSound('success');
+          alert('🎉 登録が完了しました！初回募集用の 1,500 pt をプレゼントしました！');
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -317,7 +316,7 @@ export default function Home() {
           password: authPassword,
         });
         if (error) throw error;
-        playMinimalClick('click');
+        playHapticSound('click');
       }
       setIsAuthModalOpen(false);
       fetchData();
@@ -329,7 +328,7 @@ export default function Home() {
   };
 
   const handleSignOut = async () => {
-    playMinimalClick('click');
+    playHapticSound('click');
     await supabase.auth.signOut();
     setUser(null);
     setUsername('');
@@ -346,7 +345,7 @@ export default function Home() {
     }
 
     if (userPoints < REQUIRED_POINTS_FOR_POST) {
-      setFormError(`募集には ${REQUIRED_POINTS_FOR_POST} pt 必要です。`);
+      setFormError(`募集には ${REQUIRED_POINTS_FOR_POST} pt 必要です。他のアプリのテストに参加してポイントを獲得してください。`);
       return;
     }
 
@@ -354,13 +353,13 @@ export default function Home() {
       const isGoogleUrl = testUrl.startsWith('https://') && 
         (testUrl.includes('google.com') || testUrl.includes('play.google.com'));
       if (!isGoogleUrl) {
-        setFormError('Play ConsoleのWebテスター参加URLを入力してください。');
+        setFormError('Play Consoleで発行されたWeb参加用URL（https://play.google.com/apps/testing/...）を入力してください。');
         return;
       }
     }
 
     setIsSubmitting(true);
-    const tags = tagsInput ? tagsInput.split(',').map((t) => t.trim()).filter(Boolean) : ['クローズドテスト', '審査直結'];
+    const tags = tagsInput ? tagsInput.split(',').map((t) => t.trim()).filter(Boolean) : ['クローズドテスト', '14日間維持'];
 
     try {
       const { data, error } = await supabase
@@ -390,22 +389,22 @@ export default function Home() {
         setApps([data[0], ...apps]);
       }
 
-      playMinimalClick('success');
+      playHapticSound('success');
       setName('');
       setTagsInput('');
       setTestUrl('');
       setIsModalOpen(false);
       setActiveTab('my_apps');
     } catch (err: any) {
-      setFormError('投稿失敗: ' + err.message);
+      setFormError('募集の投稿に失敗しました: ' + err.message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteMyApp = async (app: AppItem) => {
-    playMinimalClick('click');
-    if (!confirm(`「${app.name}」の募集をアーカイブしますか？\n残枠分のポイントがウォレットへ即時返還されます。`)) return;
+    playHapticSound('click');
+    if (!confirm(`「${app.name}」の募集を取り下げますか？\n集まっていない枠のポイント（未募集分）は全額返還されます。`)) return;
 
     try {
       const { error } = await supabase.from('apps').delete().eq('id', app.id);
@@ -421,18 +420,18 @@ export default function Home() {
       setUserPoints(nextPoints);
       setApps(apps.filter((a) => a.id !== app.id));
 
-      playMinimalClick('success');
-      alert(`アーカイブ完了。${refundPoints} pt が返還されました。`);
+      playHapticSound('success');
+      alert(`募集を取り下げました。${refundPoints} pt が返還されました。`);
     } catch (err) {
-      alert('削除エラーが発生しました。');
+      alert('削除に失敗しました。');
     }
   };
 
   const handleJoinTest = async (app: AppItem) => {
-    playMinimalClick('click');
+    playHapticSound('click');
 
     if (app.id === -999) {
-      alert('💡 公式デモ案件です。参加後14日間の維持＆フィードバック送信で100pt獲得のフローを体験できます。');
+      alert('💡 これは操作体験用の公式サンプルです。\n実際の案件に参加すると、14日間アプリを維持して感想を記入することで100ptを獲得できます！');
       window.open(GOOGLE_GROUP_URL, '_blank', 'noopener,noreferrer');
       markGroupAsJoined();
       return;
@@ -445,7 +444,7 @@ export default function Home() {
 
     const isAlreadyJoined = myTests.some((t) => t.app_id === app.id);
     if (isAlreadyJoined) {
-      alert('既にテスト参加トラックに追加されています。');
+      alert('このアプリのテストには既に参加中です！');
       return;
     }
 
@@ -464,7 +463,7 @@ export default function Home() {
       await supabase.from('apps').update({ current_testers: updatedCount }).eq('id', app.id);
       setApps(apps.map((a) => (a.id === app.id ? { ...a, current_testers: updatedCount } : a)));
 
-      playMinimalClick('success');
+      playHapticSound('success');
       if (app.test_url) {
         window.open(app.test_url, '_blank', 'noopener,noreferrer');
       }
@@ -478,7 +477,7 @@ export default function Home() {
     if (!file) return;
 
     setUploadingTarget(`${participationId}_${dayKey}`);
-    playMinimalClick('click');
+    playHapticSound('click');
 
     try {
       const fileExt = file.name.split('.').pop();
@@ -493,8 +492,8 @@ export default function Home() {
       await supabase.from('test_participations').update({ [dbColumn]: publicUrlData.publicUrl }).eq('id', participationId);
 
       setMyTests(myTests.map((t) => t.id === participationId ? { ...t, [dbColumn]: publicUrlData.publicUrl } : t));
-      playMinimalClick('success');
-      alert('起動ログを同期しました。');
+      playHapticSound('success');
+      alert('起動スクショを保存しました！');
     } catch (err: any) {
       alert('アップロード失敗: ' + err.message);
     } finally {
@@ -507,12 +506,12 @@ export default function Home() {
     if (!activeCompletingTest || !user) return;
 
     if (goodPoints.trim().length < 20 || improvements.trim().length < 20) {
-      alert('「評価点」「改善提案」は審査通過のため、それぞれ20文字以上入力してください。');
+      alert('審査通過のため、「良かった点」「改善点」はそれぞれ20文字以上入力してください。');
       return;
     }
 
     setFeedbackSubmitting(true);
-    playMinimalClick('click');
+    playHapticSound('click');
 
     try {
       const { error } = await supabase
@@ -535,8 +534,8 @@ export default function Home() {
 
       setMyTests(myTests.map((t) => t.id === activeCompletingTest.id ? { ...t, status: 'completed' } : t));
       setIsFeedbackModalOpen(false);
-      playMinimalClick('success');
-      alert(`🎉 14日間のトラック完遂！\n開発者プールから ${REWARD_PER_TEST} pt を受領しました。`);
+      playHapticSound('success');
+      alert(`🎉 14日間のテスト完遂、お疲れさまでした！\n報酬として ${REWARD_PER_TEST} pt を付与しました！`);
     } catch (err: any) {
       alert('提出エラー: ' + err.message);
     } finally {
@@ -545,39 +544,34 @@ export default function Home() {
   };
 
   const handleCopyReviewText = (appId: number) => {
-    playMinimalClick('click');
+    playHapticSound('click');
     const feedbacks = allParticipations.filter((p) => p.app_id === appId && p.status === 'completed');
     if (feedbacks.length === 0) {
-      alert('まだ完了テスターのフィードバックが集まっていません。14日経過後の報告をお待ちください。');
+      alert('まだ完了テスターのフィードバックが集まっていません。14日経過後の提出をお待ちください。');
       return;
     }
 
     let report = `【Google Play クローズドテスト 審査申請用フィードバック実績】\n\n`;
-    report += `■ テスト維持実績: ${feedbacks.length}名（14日間オプトイン継続確認済）\n\n`;
-    report += `■ 収集されたユーザーフィードバック:\n`;
+    report += `■ 参加テスター数: ${feedbacks.length}名（14日間オプトイン継続確認済）\n\n`;
+    report += `■ テスターからの具体的な改善フィードバック:\n`;
 
     feedbacks.forEach((f, idx) => {
-      report += `\n[Tester ${idx + 1}] Model: ${f.device_model || 'Android'} / OS: ${f.os_version || 'Android 14'}\n`;
+      report += `\n[テスター ${idx + 1}] 端末: ${f.device_model || 'Android'} / OS: ${f.os_version || 'Android 14'}\n`;
       report += `・評価点: ${f.good_points || 'なし'}\n`;
       report += `・改善要望: ${f.improvements || 'なし'}\n`;
       report += `・不具合報告: ${f.bug_reports || '発生なし'}\n`;
     });
 
-    report += `\n■ テスト結果を踏まえた対応策:\n上記のフィードバックに基づき、UI挙動およびクラッシュ対策のアップデートを実施しました。`;
+    report += `\n■ テスト結果を踏まえた対応策:\n上記のフィードバックに基づき、UIデザインの調整および安定性向上の修正アップデートを実施しました。`;
 
     navigator.clipboard.writeText(report);
-    playMinimalClick('success');
-    alert('📋 Play Console 審査用のエビデンスレポートをクリップボードにコピーしました！');
+    playHapticSound('success');
+    alert('📋 Play Console 審査用の回答テキストをコピーしました！申請画面に貼り付けてご利用ください。');
   };
 
-  const handleShareOnX = (textType: 'devlog' | 'general') => {
-    playMinimalClick('click');
-    let shareText = "";
-    if (textType === 'devlog') {
-      shareText = `Google Playの14日間クローズドテスト、テスポ（Testers Field）でテスト進行中！\n開発者プールで相互テストして審査エビデンスを自動生成。\n#個人開発 #GooglePlay #AndroidDev`;
-    } else {
-      shareText = `Google Playの「14日間12人テスト」を完全自動化する開発者相互プラットフォーム【テスターズフィールド】。\n初回15人分の募集pt無料配布中！\n#個人開発 #Androidアプリ開発`;
-    }
+  const handleShareOnX = () => {
+    playHapticSound('click');
+    const shareText = `Google Playの14日間クローズドテスト、テスターズフィールド（テスポ）で進行中！\n相互テストで15人確保＆審査用の感想レポートも自動作成できる無料Webです🤝\n#個人開発 #GooglePlay #Androidアプリ開発`;
     const shareUrl = "https://tespo-app.vercel.app";
     const twitterIntent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`;
     window.open(twitterIntent, '_blank', 'noopener,noreferrer');
@@ -591,39 +585,44 @@ export default function Home() {
   const myCreatedApps = user ? apps.filter((a) => a.user_id === user.id) : [];
   const displayedApps = apps.length > 0 ? apps : [DEMO_SAMPLE_APP];
 
-  // ワークアウト計算（アクティブな参加中日数ストリーク）
+  // 参加中アプリの最大経過日数
   const activeStreak = myTests.length > 0 
     ? Math.max(...myTests.map(t => getDaysPassed(t.started_at)))
     : 0;
 
   return (
-    <main className="min-h-screen bg-[#090a0f] text-zinc-100 flex flex-col justify-between selection:bg-emerald-500/20 selection:text-emerald-300 font-sans">
+    <main className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-between font-sans">
       <div>
-        {/* ヘッダー: Vercel / Linearライクなスリムグラスデザイン */}
-        <header className="sticky top-0 z-30 bg-[#090a0f]/80 backdrop-blur-md border-b border-zinc-800/80 px-4 py-2.5">
+        {/* ヘッダー: 清潔感のあるホワイト＆ライト境界 */}
+        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-2.5 shadow-xs">
           <div className="max-w-md mx-auto flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <button 
-                onClick={() => { playMinimalClick('tab'); setIsMenuOpen(true); }}
-                className="p-1 -ml-1 text-zinc-400 hover:text-zinc-100 rounded-md hover:bg-zinc-800/50 transition"
+                onClick={() => { playHapticSound('tab'); setIsMenuOpen(true); }}
+                className="p-1 -ml-1 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition"
+                title="メニューを開く"
               >
                 <Menu className="w-5 h-5" />
               </button>
-              <div className="flex items-center gap-1.5 font-mono text-xs font-semibold tracking-wider text-emerald-400">
-                <Terminal className="w-4 h-4 text-emerald-400" />
-                <span>TESTERS_FIELD</span>
+              <div className="flex items-center gap-1.5 font-bold text-sm text-slate-900">
+                <Smartphone className="w-5 h-5 text-emerald-600" />
+                <span>テスターズフィールド</span>
+                <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-normal border border-emerald-200">
+                  テスポ
+                </span>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               {user ? (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-mono font-medium text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-1 rounded-md max-w-[90px] truncate">
+                  <span className="text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-1 rounded-full max-w-[90px] truncate">
                     {username}
                   </span>
                   <button
                     onClick={handleSignOut}
-                    className="text-zinc-500 hover:text-zinc-300 p-1.5 rounded hover:bg-zinc-900 transition"
+                    className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition"
+                    title="ログアウト"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                   </button>
@@ -631,20 +630,20 @@ export default function Home() {
               ) : (
                 <button
                   onClick={() => {
-                    playMinimalClick('click');
+                    playHapticSound('click');
                     setIsSignUp(true);
                     setIsAuthModalOpen(true);
                   }}
-                  className="text-xs text-zinc-300 hover:text-white flex items-center gap-1 border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 px-2.5 py-1 rounded-md font-mono transition"
+                  className="text-xs text-emerald-700 hover:bg-emerald-50 border border-emerald-200 bg-white px-2.5 py-1.5 rounded-full font-semibold transition shadow-2xs"
                 >
-                  <LogIn className="w-3 h-3 text-emerald-400" />
-                  <span>LOGIN</span>
+                  <LogIn className="w-3 h-3 inline mr-1 text-emerald-600" />
+                  <span>登録 / ログイン</span>
                 </button>
               )}
 
               <button
                 onClick={() => {
-                  playMinimalClick('click');
+                  playHapticSound('click');
                   setFormError('');
                   if (!user) {
                     setIsSignUp(true);
@@ -653,140 +652,132 @@ export default function Home() {
                     setIsModalOpen(true);
                   }
                 }}
-                className="flex items-center space-x-1 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-semibold px-3 py-1 rounded-md transition active:scale-95 shadow-xs shadow-emerald-500/20"
+                className="flex items-center space-x-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-full transition shadow-xs active:scale-95"
               >
-                <PlusCircle className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>POST</span>
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>案件を募集</span>
               </button>
             </div>
           </div>
         </header>
 
-        {/* ドロワーメニュー */}
+        {/* 左スライドメニュー */}
         {isMenuOpen && (
-          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex">
-            <div className="bg-[#0e1017] w-72 h-full border-r border-zinc-800 shadow-2xl flex flex-col justify-between p-5 animate-in slide-in-from-left duration-200">
-              <div className="space-y-5">
-                <div className="flex justify-between items-center pb-3 border-b border-zinc-800">
-                  <div className="flex items-center gap-2 font-mono text-xs text-emerald-400 font-bold">
-                    <Terminal className="w-4 h-4" />
-                    <span>SYSTEM_MENU</span>
+          <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex">
+            <div className="bg-white w-72 h-full border-r border-slate-200 shadow-2xl flex flex-col justify-between p-5 animate-in slide-in-from-left duration-200">
+              <div className="space-y-4">
+                <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
+                    <Smartphone className="w-5 h-5 text-emerald-600" />
+                    <span>テスターズフィールド</span>
                   </div>
-                  <button onClick={() => { playMinimalClick('click'); setIsMenuOpen(false); }} className="text-zinc-400 hover:text-zinc-200">
+                  <button onClick={() => { playHapticSound('click'); setIsMenuOpen(false); }} className="text-slate-400 hover:text-slate-600 p-1">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
 
-                {/* 乗り換え・他社併用の正当化カード */}
-                <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-3 text-xs space-y-2">
-                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-[11px] font-mono">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>RISK_HEDGE // 他社併用ガイド</span>
+                {/* 他社併用・バックアップ安心ガイド */}
+                <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 text-xs space-y-1.5">
+                  <div className="flex items-center gap-1 text-emerald-800 font-bold text-[11px]">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>他社ツール（TestCrew等）との併用</span>
                   </div>
-                  <p className="text-zinc-400 text-[11px] leading-relaxed">
-                    TestCrewやDiscordで集めたテスターの急な離脱（14日カウントリセット）を防ぐため、テスポのプール型プールを「バックアップ保険」として同時に走らせる開発者が増えています。
+                  <p className="text-slate-600 text-[11px] leading-relaxed">
+                    途中のテスター離脱による14日リセットを防ぐため、テスポを「人数のバックアップ＆審査用の20文字エビデンス確保」として同時に走らせる開発者が増えています。
                   </p>
                 </div>
 
-                <div className="space-y-1 text-xs font-medium text-zinc-300">
+                <div className="space-y-1 text-xs font-medium text-slate-700">
                   <button
-                    onClick={() => { playMinimalClick('click'); setIsMenuOpen(false); setActiveManualModal('about'); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-zinc-800/60 transition text-left"
+                    onClick={() => { playHapticSound('click'); setIsMenuOpen(false); setActiveManualModal('about'); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-slate-100 transition text-left"
                   >
-                    <Info className="w-4 h-4 text-emerald-400" />
-                    <span>テスターズフィールドの設計思想</span>
+                    <Info className="w-4 h-4 text-emerald-600" />
+                    <span>テスターズフィールドとは？</span>
                   </button>
                   <button
-                    onClick={() => { playMinimalClick('click'); setIsMenuOpen(false); setActiveManualModal('dev'); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-zinc-800/60 transition text-left"
+                    onClick={() => { playHapticSound('click'); setIsMenuOpen(false); setActiveManualModal('dev'); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-slate-100 transition text-left"
                   >
-                    <BookOpen className="w-4 h-4 text-emerald-400" />
-                    <span>開発者向け審査突破マニュアル</span>
+                    <BookOpen className="w-4 h-4 text-emerald-600" />
+                    <span>開発者マニュアル（審査申請手順）</span>
                   </button>
                   <button
-                    onClick={() => { playMinimalClick('click'); setIsMenuOpen(false); setActiveManualModal('terms'); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-zinc-800/60 transition text-left"
+                    onClick={() => { playHapticSound('click'); setIsMenuOpen(false); setActiveManualModal('terms'); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-slate-100 transition text-left"
                   >
-                    <FileText className="w-4 h-4 text-emerald-400" />
-                    <span>利用規約 / 免責条項</span>
+                    <FileText className="w-4 h-4 text-emerald-600" />
+                    <span>利用規約 / ルール</span>
                   </button>
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-zinc-800 space-y-2">
+              <div className="pt-4 border-t border-slate-100 space-y-2">
                 <button
-                  onClick={() => handleShareOnX('general')}
-                  className="w-full py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition"
+                  onClick={handleShareOnX}
+                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-xs"
                 >
                   <Share2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>SHARE ON X</span>
+                  <span>Xでサービスをシェア</span>
                 </button>
-                <p className="text-[10px] text-zinc-600 font-mono text-center">CORE v2.0 // DARK_MINIMAL</p>
+                <p className="text-[10px] text-slate-400 text-center">Version 2.1 (ライト＆高視認性)</p>
               </div>
             </div>
-            <div className="flex-1" onClick={() => { playMinimalClick('click'); setIsMenuOpen(false); }} />
+            <div className="flex-1" onClick={() => { playHapticSound('click'); setIsMenuOpen(false); }} />
           </div>
         )}
 
-        <div className="max-w-md mx-auto px-4 pt-4 space-y-3">
+        <div className="max-w-md mx-auto px-4 pt-3 space-y-3">
           
-          {/* AI Dev-Log: 筋トレ管理風 ワークアウトストリーク */}
-          <div className="bg-gradient-to-b from-zinc-900 to-[#0e111a] border border-zinc-800 rounded-xl p-3.5 shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
-            
-            <div className="flex items-center justify-between mb-3 border-b border-zinc-800/80 pb-2">
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
-                <span className="font-mono text-xs font-bold text-zinc-300">DEV_STREAK // 審査準備度</span>
+          {/* ジム風「14日間テスト管理ボード」 */}
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs relative overflow-hidden">
+            <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2.5">
+              <div className="flex items-center gap-1.5">
+                <Activity className="w-4 h-4 text-emerald-600" />
+                <span className="text-xs font-bold text-slate-900">あなたのテスト活動・進捗</span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                ACTIVE
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                14日オプトイン追跡中
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 text-center font-mono">
-              <div className="bg-black/40 border border-zinc-800/60 rounded-lg p-2">
-                <p className="text-[10px] text-zinc-500">WALLET</p>
-                <p className="text-base font-bold text-white mt-0.5">{userPoints.toLocaleString()}<span className="text-[10px] text-emerald-400 ml-0.5">pt</span></p>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
+                <p className="text-[10px] font-semibold text-slate-500">保有ポイント</p>
+                <p className="text-lg font-bold text-slate-900 mt-0.5">{userPoints.toLocaleString()}<span className="text-[10px] font-normal text-slate-500 ml-0.5">pt</span></p>
               </div>
-              <div className="bg-black/40 border border-zinc-800/60 rounded-lg p-2">
-                <p className="text-[10px] text-zinc-500">MAX STREAK</p>
-                <p className="text-base font-bold text-emerald-400 mt-0.5">{activeStreak}<span className="text-[10px] text-zinc-500 ml-0.5">/14日</span></p>
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
+                <p className="text-[10px] font-semibold text-slate-500">最長継続日数</p>
+                <p className="text-lg font-bold text-emerald-600 mt-0.5">{activeStreak}<span className="text-[10px] font-normal text-slate-500 ml-0.5">/14日</span></p>
               </div>
-              <div className="bg-black/40 border border-zinc-800/60 rounded-lg p-2">
-                <p className="text-[10px] text-zinc-500">ACTIVE TRACK</p>
-                <p className="text-base font-bold text-white mt-0.5">{myTests.length}<span className="text-[10px] text-zinc-500 ml-0.5">apps</span></p>
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
+                <p className="text-[10px] font-semibold text-slate-500">参加中アプリ</p>
+                <p className="text-lg font-bold text-slate-900 mt-0.5">{myTests.length}<span className="text-[10px] font-normal text-slate-500 ml-0.5">件</span></p>
               </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between text-[11px] text-zinc-400 bg-zinc-950/60 p-2 rounded-lg border border-zinc-800/40">
+            <div className="mt-3 flex items-center justify-between text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200/60">
               <span className="flex items-center gap-1.5">
-                <Flame className="w-3.5 h-3.5 text-amber-400" />
-                <span>AI Insight: 15名確保で審査通過率94%達成</span>
+                <Flame className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                <span>15名確保で離脱があっても審査条件（12人）を安全突破！</span>
               </span>
-              <button 
-                onClick={() => handleShareOnX('devlog')}
-                className="text-emerald-400 hover:text-emerald-300 font-mono text-[10px] flex items-center gap-0.5"
-              >
-                <span>進捗共有</span>
-                <Share2 className="w-2.5 h-2.5" />
-              </button>
             </div>
           </div>
 
-          {/* 公式Googleグループステータス */}
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
+          {/* 公式Googleグループ参加カード（初見で一番迷うポイントを解消） */}
+          <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between shadow-2xs">
             <div className="flex items-center gap-2.5">
-              <div className={`w-2 h-2 rounded-full ${isGroupJoinedState ? 'bg-emerald-400' : 'bg-amber-400 animate-ping'}`} />
+              <div className={`w-2.5 h-2.5 rounded-full ${isGroupJoinedState ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
               <div className="text-xs">
-                <p className="font-semibold text-zinc-200">公式Googleグループ</p>
-                <p className="text-[10px] text-zinc-500">Playストア参加用の共通テストプール</p>
+                <p className="font-bold text-slate-900">公式Googleグループ（参加必須）</p>
+                <p className="text-[11px] text-slate-500">参加しないとPlayストアでエラーが出ます</p>
               </div>
             </div>
 
             {isGroupJoinedState ? (
-              <span className="text-xs font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-2.5 py-1 rounded-md">
-                SYNCED ✓
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                参加済み
               </span>
             ) : (
               <a
@@ -794,54 +785,88 @@ export default function Home() {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={markGroupAsJoined}
-                className="text-xs font-bold text-black bg-emerald-400 hover:bg-emerald-300 px-3 py-1.5 rounded-md transition shadow-xs"
+                className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg transition shadow-xs flex items-center gap-1"
               >
-                グループ参加
+                <span>参加する（無料）</span>
+                <ExternalLink className="w-3 h-3" />
               </a>
             )}
           </div>
 
-          {/* タブナビゲーション */}
-          <div className="grid grid-cols-3 gap-1 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800 text-xs font-mono">
+          {/* 3ステップ使い方ガイド（初心者向け開閉式） */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
             <button
-              onClick={() => { playMinimalClick('tab'); setActiveTab('explore'); }}
-              className={`py-1.5 rounded-lg transition ${
+              onClick={() => { playHapticSound('tab'); setIsGuideOpen(!isGuideOpen); }}
+              className="w-full px-3.5 py-2.5 text-xs font-bold text-slate-700 flex items-center justify-between hover:bg-slate-50 transition"
+            >
+              <span className="flex items-center gap-1.5">
+                <Award className="w-4 h-4 text-emerald-600" />
+                <span>初めての方へ：テスポの全体の流れ</span>
+              </span>
+              <span className="text-[11px] text-slate-400 flex items-center gap-0.5 font-normal">
+                {isGuideOpen ? '閉じる' : '手順を見る'}
+                {isGuideOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </span>
+            </button>
+            {isGuideOpen && (
+              <div className="px-3.5 pb-3.5 pt-1 text-[11px] text-slate-600 border-t border-slate-100 bg-slate-50/50 space-y-2">
+                <div className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                  <p><strong>公式Googleグループに参加</strong>（実機のPlayストアと同じGoogleアカウント）</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                  <p><strong>アプリを募集する</strong>（初回付与の1,500ptで即座に15人分の募集が可能）</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                  <p><strong>他のアプリを14日間テスト</strong>してポイントを貯めたり、審査用の感想レポートを回収！</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 分かりやすい日本語タブナビゲーション */}
+          <div className="grid grid-cols-3 gap-1 bg-slate-200/70 p-1 rounded-xl text-xs font-bold text-slate-600">
+            <button
+              onClick={() => { playHapticSound('tab'); setActiveTab('explore'); }}
+              className={`py-2 rounded-lg transition ${
                 activeTab === 'explore'
-                  ? 'bg-zinc-800 text-emerald-400 font-bold shadow-xs'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  ? 'bg-white text-emerald-700 shadow-xs'
+                  : 'hover:text-slate-900'
               }`}
             >
-              EXPLORE ({displayedApps.length})
+              探す・参加 ({displayedApps.length})
             </button>
             <button
-              onClick={() => { playMinimalClick('tab'); setActiveTab('joined'); }}
-              className={`py-1.5 rounded-lg transition ${
+              onClick={() => { playHapticSound('tab'); setActiveTab('joined'); }}
+              className={`py-2 rounded-lg transition ${
                 activeTab === 'joined'
-                  ? 'bg-zinc-800 text-emerald-400 font-bold shadow-xs'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  ? 'bg-white text-emerald-700 shadow-xs'
+                  : 'hover:text-slate-900'
               }`}
             >
-              TRACKING ({myTests.length})
+              参加中・14日管理 ({myTests.length})
             </button>
             <button
-              onClick={() => { playMinimalClick('tab'); setActiveTab('my_apps'); }}
-              className={`py-1.5 rounded-lg transition ${
+              onClick={() => { playHapticSound('tab'); setActiveTab('my_apps'); }}
+              className={`py-2 rounded-lg transition ${
                 activeTab === 'my_apps'
-                  ? 'bg-zinc-800 text-emerald-400 font-bold shadow-xs'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  ? 'bg-white text-emerald-700 shadow-xs'
+                  : 'hover:text-slate-900'
               }`}
             >
-              MY_APPS ({myCreatedApps.length})
+              自分の案件 ({myCreatedApps.length})
             </button>
           </div>
 
-          {/* タブ1: 募集中の案件一覧 */}
+          {/* タブ1: 募集中のアプリ一覧 */}
           {activeTab === 'explore' && (
             <div className="space-y-3 pt-1">
               {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-12 text-zinc-500">
-                  <Loader2 className="w-6 h-6 animate-spin text-emerald-400 mb-2" />
-                  <p className="text-xs font-mono">LOADING_DEVELOPER_POOL...</p>
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                  <Loader2 className="w-6 h-6 animate-spin text-emerald-600 mb-2" />
+                  <p className="text-xs">アプリを読み込み中...</p>
                 </div>
               ) : (
                 displayedApps.map((app) => {
@@ -856,85 +881,86 @@ export default function Home() {
                   return (
                     <div
                       key={app.id}
-                      className="bg-zinc-900/60 border border-zinc-800/80 hover:border-zinc-700/80 rounded-xl p-4 transition shadow-sm space-y-3"
+                      className={`bg-white rounded-xl p-4 border shadow-xs flex flex-col justify-between transition ${
+                        isDemo ? 'border-emerald-300 ring-1 ring-emerald-200' : 'border-slate-200 hover:border-slate-300'
+                      }`}
                     >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-emerald-400 border border-zinc-700">
-                              {app.category}
+                      <div>
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded mb-1 ${
+                              isDemo ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {isDemo ? '公式サンプル' : app.category}
                             </span>
-                            {isDemo && (
-                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                                TUTORIAL
-                              </span>
-                            )}
+                            <h3 className="font-bold text-slate-900 text-base">{app.name}</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">{app.developer}</p>
                           </div>
-                          <h3 className="font-bold text-white text-base tracking-tight">{app.name}</h3>
-                          <p className="text-xs text-zinc-500 font-mono mt-0.5">by {app.developer}</p>
-                        </div>
-                        <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-900/80 px-2 py-1 rounded">
-                          +{app.reward_points} pt
-                        </span>
-                      </div>
-
-                      <div className="flex flex-wrap gap-1">
-                        {app.tags?.map((tag, idx) => (
-                          <span key={idx} className="text-[10px] bg-zinc-800/60 text-zinc-400 px-2 py-0.5 rounded font-mono">
-                            #{tag}
+                          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
+                            +{app.reward_points} pt
                           </span>
-                        ))}
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-mono text-zinc-400">
-                          <span className="flex items-center gap-1">
-                            <Users className="w-3.5 h-3.5 text-zinc-500" />
-                            CAPACITY
-                          </span>
-                          <span>{app.current_testers} / {app.required_testers} SLOT</span>
                         </div>
-                        <div className="w-full bg-zinc-800/80 h-1.5 rounded-full overflow-hidden">
-                          <div
-                            className="bg-emerald-400 h-full rounded-full transition-all duration-500"
-                            style={{ width: `${progress}%` }}
-                          />
+
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          {app.tags?.map((tag, idx) => (
+                            <span key={idx} className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                              #{tag}
+                            </span>
+                          ))}
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => handleJoinTest(app)}
-                        disabled={Boolean(!isDemo && (isJoined || isMyCreated))}
-                        className={`w-full py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
-                          isDemo
-                            ? 'bg-zinc-800 hover:bg-zinc-700 text-emerald-400 border border-emerald-800/60'
-                            : isMyCreated
-                            ? 'bg-zinc-900 text-zinc-600 border border-zinc-800 cursor-not-allowed'
-                            : isJoined
-                            ? 'bg-zinc-900 text-emerald-500 border border-emerald-900/40 cursor-not-allowed'
-                            : 'bg-emerald-400 hover:bg-emerald-300 text-black font-bold active:scale-[0.99]'
-                        }`}
-                      >
-                        {isDemo ? (
-                          <>
-                            <Sparkles className="w-3.5 h-3.5" />
-                            <span>操作フローを体験する</span>
-                          </>
-                        ) : isMyCreated ? (
-                          <span>あなたの募集案件です</span>
-                        ) : isJoined ? (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>14日トラッキング中</span>
-                          </>
-                        ) : (
-                          <>
-                            <Calendar className="w-3.5 h-3.5" />
-                            <span>14日テストに参加して100pt獲得</span>
-                            <ExternalLink className="w-3 h-3 ml-0.5" />
-                          </>
-                        )}
-                      </button>
+                      <div>
+                        <div className="space-y-1 mb-2.5">
+                          <div className="flex justify-between text-xs text-slate-500 font-medium">
+                            <span className="flex items-center gap-1">
+                              <Users className="w-3.5 h-3.5 text-slate-400" />
+                              テスター確保状況
+                            </span>
+                            <span>{app.current_testers} / {app.required_testers} 人</span>
+                          </div>
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div
+                              className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleJoinTest(app)}
+                          disabled={Boolean(!isDemo && (isJoined || isMyCreated))}
+                          className={`w-full py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                            isDemo
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs active:scale-[0.99]'
+                              : isMyCreated
+                              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                              : isJoined
+                              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs active:scale-[0.99]'
+                          }`}
+                        >
+                          {isDemo ? (
+                            <>
+                              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                              <span>操作体験・参加方法を確認する</span>
+                            </>
+                          ) : isMyCreated ? (
+                            <span>あなたが募集したアプリです</span>
+                          ) : isJoined ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                              <span>現在テスト参加中</span>
+                            </>
+                          ) : (
+                            <>
+                              <Calendar className="w-3.5 h-3.5" />
+                              <span>14日間のテストに参加する</span>
+                              <ExternalLink className="w-3 h-3 ml-0.5" />
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   );
                 })
@@ -942,17 +968,17 @@ export default function Home() {
             </div>
           )}
 
-          {/* タブ2: 参加中（維持トラッキング） */}
+          {/* タブ2: 参加中（14日間維持＆スクショ管理） */}
           {activeTab === 'joined' && (
             <div className="space-y-3 pt-1">
               {myTests.length === 0 ? (
-                <div className="text-center py-12 bg-zinc-900/40 rounded-xl border border-zinc-800 text-zinc-500 p-6">
-                  <p className="text-xs font-mono">NO_ACTIVE_TRACKING</p>
+                <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-500 p-6">
+                  <p className="text-xs">現在参加中のテストはありません。</p>
                   <button
-                    onClick={() => { playMinimalClick('tab'); setActiveTab('explore'); }}
-                    className="mt-3 text-xs text-emerald-400 font-mono hover:underline inline-block"
+                    onClick={() => { playHapticSound('tab'); setActiveTab('explore'); }}
+                    className="mt-3 text-xs text-emerald-600 font-bold hover:underline inline-block"
                   >
-                    EXPLORE_APPS →
+                    募集中のアプリを探す →
                   </button>
                 </div>
               ) : (
@@ -962,99 +988,99 @@ export default function Home() {
                   const isCompleted = t.status === 'completed';
 
                   return (
-                    <div key={t.id} className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-3">
+                    <div key={t.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
                       <div className="flex justify-between items-start">
                         <div>
-                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${
-                            isCompleted ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-zinc-800 text-zinc-300'
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                            isCompleted ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-700'
                           }`}>
-                            {isCompleted ? 'STATUS: COMPLETED' : `DAY ${days} / 14`}
+                            {isCompleted ? 'テスト完了・受取済' : `${days}日目 / 14日間`}
                           </span>
-                          <h4 className="font-bold text-white text-sm mt-1.5">{t.app?.name || 'テスト案件'}</h4>
+                          <h4 className="font-bold text-slate-900 text-sm mt-1">{t.app?.name || 'テストアプリ'}</h4>
                         </div>
-                        <span className="text-xs font-mono font-bold text-emerald-400">+{t.app?.reward_points || REWARD_PER_TEST} pt</span>
+                        <span className="text-xs font-bold text-emerald-700">+{t.app?.reward_points || REWARD_PER_TEST} pt</span>
                       </div>
 
-                      <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                         <div
-                          className="bg-emerald-400 h-full rounded-full transition-all"
+                          className="bg-emerald-500 h-full rounded-full transition-all"
                           style={{ width: `${Math.min(100, (days / 14) * 100)}%` }}
                         />
                       </div>
 
-                      <div className="bg-black/50 p-3 rounded-lg border border-zinc-800/80">
-                        <p className="text-[11px] font-mono text-zinc-400 flex items-center gap-1.5 mb-2.5">
-                          <Camera className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>PROOF_LOG // 起動証明</span>
+                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                        <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5 mb-2">
+                          <Camera className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>起動証明スクショ提出（ステータスバーの時計必須）</span>
                         </p>
-                        <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-mono">
-                          <label className="border border-dashed border-zinc-700 hover:border-zinc-500 rounded p-2 cursor-pointer transition flex flex-col items-center justify-center">
-                            <span className="text-zinc-400">DAY 1</span>
+                        <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                          <label className="border border-dashed border-slate-300 rounded p-2 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
+                            <span className="font-medium text-slate-600">1日目（開始）</span>
                             {t.screenshot_day1 ? (
-                              <span className="text-emerald-400 font-bold mt-1">SYNCED ✓</span>
+                              <span className="text-emerald-600 font-bold mt-1">提出済 ✓</span>
                             ) : uploadingTarget === `${t.id}_day1` ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400 mt-1" />
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 mt-1" />
                             ) : (
-                              <span className="text-zinc-500 mt-1">UPLOAD</span>
+                              <span className="text-emerald-600 font-bold mt-1">保存</span>
                             )}
                             <input type="file" accept="image/*" className="hidden" onChange={(e) => handleScreenshotUpload(e, t.id, 'day1')} />
                           </label>
 
-                          <label className="border border-dashed border-zinc-700 hover:border-zinc-500 rounded p-2 cursor-pointer transition flex flex-col items-center justify-center">
-                            <span className="text-zinc-400">DAY 7</span>
+                          <label className="border border-dashed border-slate-300 rounded p-2 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
+                            <span className="font-medium text-slate-600">7日目（中間）</span>
                             {t.screenshot_day7 ? (
-                              <span className="text-emerald-400 font-bold mt-1">SYNCED ✓</span>
+                              <span className="text-emerald-600 font-bold mt-1">提出済 ✓</span>
                             ) : uploadingTarget === `${t.id}_day7` ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400 mt-1" />
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 mt-1" />
                             ) : (
-                              <span className="text-zinc-500 mt-1">UPLOAD</span>
+                              <span className="text-emerald-600 font-bold mt-1">保存</span>
                             )}
                             <input type="file" accept="image/*" className="hidden" onChange={(e) => handleScreenshotUpload(e, t.id, 'day7')} />
                           </label>
 
-                          <label className="border border-dashed border-zinc-700 hover:border-zinc-500 rounded p-2 cursor-pointer transition flex flex-col items-center justify-center">
-                            <span className="text-zinc-400">DAY 14</span>
+                          <label className="border border-dashed border-slate-300 rounded p-2 cursor-pointer hover:bg-white transition flex flex-col items-center justify-center">
+                            <span className="font-medium text-slate-600">14日目（完遂）</span>
                             {t.screenshot_day14 ? (
-                              <span className="text-emerald-400 font-bold mt-1">SYNCED ✓</span>
+                              <span className="text-emerald-600 font-bold mt-1">提出済 ✓</span>
                             ) : uploadingTarget === `${t.id}_day14` ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400 mt-1" />
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 mt-1" />
                             ) : (
-                              <span className="text-zinc-500 mt-1">UPLOAD</span>
+                              <span className="text-emerald-600 font-bold mt-1">保存</span>
                             )}
                             <input type="file" accept="image/*" className="hidden" onChange={(e) => handleScreenshotUpload(e, t.id, 'day14')} />
                           </label>
                         </div>
                       </div>
 
-                      <div className="flex justify-between items-center pt-1 font-mono text-xs">
-                        <span className="text-zinc-500 text-[11px]">
+                      <div className="flex justify-between items-center pt-1 text-xs">
+                        <span className="text-slate-500 text-[11px]">
                           {isCompleted 
-                            ? 'WALLET_CREDITED' 
+                            ? '獲得完了' 
                             : isReadyToComplete 
-                              ? 'READY_FOR_FEEDBACK' 
-                              : `REMAINING: ${14 - days} DAYS`}
+                              ? '14日達成！フィードバック記入可能' 
+                              : `あと ${14 - days} 日間端末に保持`}
                         </span>
 
                         {isCompleted ? (
-                          <span className="text-emerald-400 font-bold flex items-center gap-1">
+                          <span className="text-emerald-600 font-bold flex items-center gap-1">
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            COMPLETED
+                            受取完了
                           </span>
                         ) : isReadyToComplete ? (
                           <button
                             onClick={() => {
-                              playMinimalClick('click');
+                              playHapticSound('click');
                               setActiveCompletingTest(t);
                               setIsFeedbackModalOpen(true);
                             }}
-                            className="bg-emerald-400 hover:bg-emerald-300 text-black px-3 py-1.5 rounded-md font-bold text-xs flex items-center gap-1 shadow-xs transition"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1 shadow-xs transition"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
-                            審査レポート記入 (+100pt)
+                            感想を書いて100pt受取
                           </button>
                         ) : (
-                          <span className="bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded text-[10px]">
-                            ACTIVE_HOLD
+                          <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-medium">
+                            端末に保持中
                           </span>
                         )}
                       </div>
@@ -1065,15 +1091,15 @@ export default function Home() {
             </div>
           )}
 
-          {/* タブ3: 自分の案件 */}
+          {/* タブ3: 自分が募集したアプリ */}
           {activeTab === 'my_apps' && (
             <div className="space-y-3 pt-1">
               {myCreatedApps.length === 0 ? (
-                <div className="text-center py-12 bg-zinc-900/40 rounded-xl border border-zinc-800 text-zinc-500 p-6">
-                  <p className="text-xs font-mono">NO_PROJECTS_REGISTERED</p>
+                <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-500 p-6">
+                  <p className="text-xs">あなたが募集中のアプリはありません。</p>
                   <button
                     onClick={() => {
-                      playMinimalClick('click');
+                      playHapticSound('click');
                       if (!user) {
                         setIsSignUp(true);
                         setIsAuthModalOpen(true);
@@ -1081,24 +1107,25 @@ export default function Home() {
                         setIsModalOpen(true);
                       }
                     }}
-                    className="mt-3 text-xs bg-emerald-400 hover:bg-emerald-300 text-black font-bold px-4 py-2 rounded-md font-mono inline-block transition"
+                    className="mt-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg inline-block transition"
                   >
-                    + REGISTER_PROJECT
+                    案件を新規募集する
                   </button>
                 </div>
               ) : (
                 myCreatedApps.map((app) => (
-                  <div key={app.id} className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-3">
+                  <div key={app.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="font-bold text-white text-sm">{app.name}</h4>
-                        <p className="text-xs font-mono text-zinc-400 mt-0.5">
-                          TESTERS: <span className="text-emerald-400 font-bold">{app.current_testers}</span> / {app.required_testers}
+                        <h4 className="font-bold text-slate-900 text-sm">{app.name}</h4>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          テスター確保: <span className="text-emerald-600 font-bold">{app.current_testers}</span> / {app.required_testers} 人
                         </p>
                       </div>
                       <button
                         onClick={() => handleDeleteMyApp(app)}
-                        className="text-zinc-500 hover:text-red-400 p-1.5 rounded hover:bg-zinc-800 transition"
+                        className="text-slate-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition"
+                        title="募集を取り消してポイント返還"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -1106,10 +1133,10 @@ export default function Home() {
 
                     <button
                       onClick={() => handleCopyReviewText(app.id)}
-                      className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-emerald-300 rounded-lg text-xs font-mono flex items-center justify-center gap-1.5 transition"
+                      className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition"
                     >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>COPY_EVIDENCE_FOR_CONSOLE</span>
+                      <Copy className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>審査申請用フィードバックをコピー</span>
                     </button>
                   </div>
                 ))
@@ -1120,75 +1147,79 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ミニマルフッター */}
-      <footer className="mt-12 border-t border-zinc-900 py-6 text-center text-xs text-zinc-600 font-mono space-y-2">
-        <p>© TESTERS FIELD // DEVELOPER CLOSED TEST MUTUAL POOL</p>
-        <div className="flex justify-center items-center gap-4 text-[11px] text-zinc-500">
-          <button onClick={() => { playMinimalClick('tab'); setActiveManualModal('terms'); }} className="hover:text-zinc-300">
+      {/* フッター */}
+      <footer className="mt-12 border-t border-slate-200 py-6 text-center text-xs text-slate-400 space-y-2">
+        <p>© テスターズフィールド (Testers Field) - 個人開発者のGoogle Playクローズドテスト相互プラットフォーム</p>
+        <p className="text-[10px] text-slate-400">Google Play および Android は Google LLC の商標です。</p>
+        <div className="flex justify-center items-center gap-4 text-xs text-slate-500 pt-1">
+          <button onClick={() => { playHapticSound('tab'); setActiveManualModal('terms'); }} className="hover:underline">
             利用規約
           </button>
           <span>•</span>
-          <button onClick={() => { playMinimalClick('tab'); setActiveManualModal('about'); }} className="hover:text-zinc-300">
-            設計思想
+          <button onClick={() => { playHapticSound('tab'); setActiveManualModal('about'); }} className="hover:underline">
+            サービス概要
           </button>
           <span>•</span>
-          <a href="https://forms.gle/3sTTB61MrBeghMTd6" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300">
-            バグ・悪質テスター報告
+          <a href="https://forms.gle/3sTTB61MrBeghMTd6" target="_blank" rel="noopener noreferrer" className="hover:underline">
+            不具合・違反報告
           </a>
         </div>
       </footer>
 
-      {/* 認証モーダル */}
+      {/* ログイン・新規登録モーダル */}
       {isAuthModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#0e1017] border border-zinc-800 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-in fade-in zoom-in duration-150">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 w-full max-w-sm rounded-2xl p-5 shadow-xl animate-in fade-in zoom-in duration-150">
             <div className="flex justify-between items-center mb-3">
               <div>
-                <h3 className="font-bold text-white text-base font-mono">{isSignUp ? 'REGISTER' : 'LOGIN'}</h3>
+                <h3 className="font-bold text-slate-900 text-base">{isSignUp ? '新規登録' : 'ログイン'}</h3>
                 {isSignUp && (
-                  <p className="text-[11px] text-emerald-400 font-mono mt-0.5">
-                    🎁 初回募集枠 1,500 pt 付与中
+                  <p className="text-[11px] text-emerald-600 font-bold mt-0.5">
+                    🎁 新規登録で初回募集用 1,500 pt プレゼント中！
                   </p>
                 )}
               </div>
-              <button onClick={() => { playMinimalClick('click'); setIsAuthModalOpen(false); }} className="text-zinc-400 hover:text-white">
+              <button onClick={() => { playHapticSound('click'); setIsAuthModalOpen(false); }} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {isSignUp && (
-              <div className="mb-4 bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs space-y-2">
-                <p className="font-bold text-zinc-200 flex items-center gap-1 font-mono text-[11px]">
-                  <Users className="w-3.5 h-3.5 text-emerald-400" />
-                  STEP 1: 公式Googleグループ同期（必須）
+              <div className="mb-4 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-2">
+                <p className="font-bold text-slate-900 flex items-center gap-1 text-[11px]">
+                  <Users className="w-3.5 h-3.5 text-emerald-600" />
+                  STEP 1: 公式Googleグループに参加（必須）
                 </p>
-                <p className="text-zinc-400 text-[11px] leading-relaxed">
-                  Android実機のGoogle Playと同じGoogleアカウントでご参加ください。
+                <p className="text-slate-500 text-[11px] leading-relaxed">
+                  未参加の場合、Playストアでアプリが表示されずエラーになります。
+                </p>
+                <p className="text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200 font-semibold">
+                  ⚠️ Android実機（Playストア）と同じGoogleアカウントでご参加ください。
                 </p>
                 <a
                   href={GOOGLE_GROUP_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={markGroupAsJoined}
-                  className="block text-center py-2 bg-emerald-400 hover:bg-emerald-300 text-black font-bold rounded-lg text-xs transition"
+                  className="block text-center py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition"
                 >
-                  Googleグループに参加する
+                  公式グループに参加する（無料）
                 </a>
 
-                <label className="flex items-start gap-2 text-zinc-300 text-[11px] cursor-pointer pt-1">
+                <label className="flex items-start gap-2 text-slate-800 text-[11px] font-semibold cursor-pointer pt-1 bg-white p-2 rounded border border-slate-200">
                   <input
                     type="checkbox"
                     checked={hasJoinedGroup}
-                    onChange={(e) => { playMinimalClick('click'); setHasJoinedGroup(e.target.checked); }}
-                    className="mt-0.5 rounded border-zinc-700 text-emerald-500 bg-zinc-800"
+                    onChange={(e) => { playHapticSound('click'); setHasJoinedGroup(e.target.checked); }}
+                    className="mt-0.5 rounded border-slate-300 text-emerald-600"
                   />
-                  <span>グループ参加完了を確認しました</span>
+                  <span>公式グループへの参加を完了しました</span>
                 </label>
               </div>
             )}
 
             {authError && (
-              <div className="mb-3 p-2 bg-red-950/60 border border-red-800 text-red-300 rounded text-xs">
+              <div className="mb-3 p-2 bg-red-50 border border-red-200 text-red-600 rounded text-xs">
                 {authError}
               </div>
             )}
@@ -1196,77 +1227,77 @@ export default function Home() {
             <form onSubmit={handleAuth} className="space-y-3 text-sm">
               {isSignUp && (
                 <div>
-                  <label className="block text-xs font-mono text-zinc-400 mb-1">DEVELOPER_ID</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">お名前（開発者名）</label>
                   <input
                     type="text"
                     required
-                    placeholder="StudioAlfa"
+                    placeholder="例: 山田開発, StudioApp"
                     value={authUsername}
                     onChange={(e) => setAuthUsername(e.target.value)}
-                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white focus:outline-hidden focus:border-emerald-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-mono text-zinc-400 mb-1">EMAIL</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">メールアドレス</label>
                 <input
                   type="email"
                   required
                   placeholder="dev@example.com"
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
-                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white focus:outline-hidden focus:border-emerald-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-mono text-zinc-400 mb-1">PASSWORD</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">パスワード</label>
                 <input
                   type="password"
                   required
-                  placeholder="••••••••"
+                  placeholder="6文字以上のパスワード"
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white focus:outline-hidden focus:border-emerald-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={authLoading || (isSignUp && !hasJoinedGroup)}
-                className="w-full py-2.5 bg-emerald-400 hover:bg-emerald-300 text-black font-mono font-bold rounded-lg text-xs transition disabled:opacity-40"
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition disabled:opacity-40"
               >
-                {authLoading ? 'AUTHENTICATING...' : isSignUp ? 'CREATE_ACCOUNT (+1500pt)' : 'SIGN_IN'}
+                {authLoading ? '処理中...' : isSignUp ? '1,500ptを受け取って登録' : 'ログイン'}
               </button>
             </form>
 
             <div className="mt-3 text-center">
               <button
                 onClick={() => {
-                  playMinimalClick('tab');
+                  playHapticSound('tab');
                   setIsSignUp(!isSignUp);
                   setAuthError('');
                 }}
-                className="text-xs text-zinc-500 hover:text-zinc-300 font-mono"
+                className="text-xs text-emerald-600 hover:underline"
               >
-                {isSignUp ? 'アカウントをお持ちの方 (LOGIN)' : '初めての方 (REGISTER)'}
+                {isSignUp ? 'アカウントをお持ちの方（ログイン）' : '初めての方（新規登録）'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* フィードバックモーダル */}
+      {/* フィードバック記入モーダル */}
       {isFeedbackModalOpen && activeCompletingTest && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#0e1017] border border-zinc-800 w-full max-w-md rounded-2xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl p-5 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-3">
               <div>
-                <h3 className="font-bold text-white text-base font-mono">SUBMIT_EVIDENCE</h3>
-                <p className="text-[11px] text-zinc-500">Google審査提出用の高品質レポートを記録します</p>
+                <h3 className="font-bold text-slate-900 text-base">テスト完了フィードバック提出</h3>
+                <p className="text-[11px] text-slate-500">Google Play審査申請用のフィードバックを記録します</p>
               </div>
-              <button onClick={() => { playMinimalClick('click'); setIsFeedbackModalOpen(false); }} className="text-zinc-400 hover:text-white">
+              <button onClick={() => { playHapticSound('click'); setIsFeedbackModalOpen(false); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1274,34 +1305,34 @@ export default function Home() {
             <form onSubmit={handleFeedbackSubmit} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-zinc-400 font-mono mb-1">DEVICE_MODEL *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">使用端末名 *</label>
                   <input
                     type="text"
                     required
-                    placeholder="Pixel 8"
+                    placeholder="例: Pixel 8, Galaxy S23"
                     value={deviceModel}
                     onChange={(e) => setDeviceModel(e.target.value)}
-                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
                   />
                 </div>
                 <div>
-                  <label className="block text-zinc-400 font-mono mb-1">OS_VERSION *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">OSバージョン *</label>
                   <input
                     type="text"
                     required
                     placeholder="Android 14"
                     value={osVersion}
                     onChange={(e) => setOsVersion(e.target.value)}
-                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
                   />
                 </div>
               </div>
 
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <label className="text-zinc-400">良かった点・UI挙動 (20文字以上) *</label>
-                  <span className={`font-mono text-[10px] ${goodPoints.trim().length >= 20 ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                    {goodPoints.trim().length}/20
+                  <label className="font-semibold text-slate-700">良かった点・使い心地 (20文字以上) *</label>
+                  <span className={`text-[10px] font-bold ${goodPoints.trim().length >= 20 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {goodPoints.trim().length} / 20文字
                   </span>
                 </div>
                 <textarea
@@ -1309,15 +1340,15 @@ export default function Home() {
                   rows={2}
                   value={goodPoints}
                   onChange={(e) => setGoodPoints(e.target.value)}
-                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
                 />
               </div>
 
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <label className="text-zinc-400">改善提案・UIの違和感 (20文字以上) *</label>
-                  <span className={`font-mono text-[10px] ${improvements.trim().length >= 20 ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                    {improvements.trim().length}/20
+                  <label className="font-semibold text-slate-700">改善してほしい点・気になる点 (20文字以上) *</label>
+                  <span className={`text-[10px] font-bold ${improvements.trim().length >= 20 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {improvements.trim().length} / 20文字
                   </span>
                 </div>
                 <textarea
@@ -1325,27 +1356,27 @@ export default function Home() {
                   rows={2}
                   value={improvements}
                   onChange={(e) => setImprovements(e.target.value)}
-                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
                 />
               </div>
 
               <div>
-                <label className="block text-zinc-400 mb-1">不具合報告（なければ「なし」） *</label>
+                <label className="block font-semibold text-slate-700 mb-1">不具合報告（なければ「なし」） *</label>
                 <input
                   type="text"
                   required
                   value={bugReports}
                   onChange={(e) => setBugReports(e.target.value)}
-                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={feedbackSubmitting || goodPoints.trim().length < 20 || improvements.trim().length < 20 || !deviceModel.trim()}
-                className="w-full py-2.5 bg-emerald-400 hover:bg-emerald-300 text-black font-mono font-bold rounded-lg transition disabled:opacity-40"
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition disabled:opacity-40"
               >
-                {feedbackSubmitting ? 'SUBMITTING...' : 'COMPLETE (+100pt)'}
+                {feedbackSubmitting ? '提出中...' : '提出して 100 pt を獲得'}
               </button>
             </form>
           </div>
@@ -1354,65 +1385,65 @@ export default function Home() {
 
       {/* 案件募集モーダル */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#0e1017] border border-zinc-800 w-full max-w-md rounded-2xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl p-5 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-3">
               <div>
-                <h3 className="font-bold text-white text-base font-mono">POST_PROJECT</h3>
-                <p className="text-[11px] text-zinc-500">
-                  CONSUME: <span className="text-emerald-400 font-bold">{REQUIRED_POINTS_FOR_POST} pt</span> (BALANCE: {userPoints} pt)
+                <h3 className="font-bold text-slate-900 text-base">テストアプリを募集する</h3>
+                <p className="text-[11px] text-slate-500">
+                  消費: <span className="text-emerald-600 font-bold">{REQUIRED_POINTS_FOR_POST} pt</span> (保有残高: {userPoints} pt)
                 </p>
               </div>
-              <button onClick={() => { playMinimalClick('click'); setIsModalOpen(false); }} className="text-zinc-400 hover:text-white">
+              <button onClick={() => { playHapticSound('click'); setIsModalOpen(false); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="mb-3 bg-zinc-900 border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-300">
-              <span className="font-bold block mb-1 text-emerald-400 font-mono">SETUP_CHECK</span>
-              Play Consoleテスター欄に下記グループアドレスを登録してください：
-              <div className="mt-1 flex items-center justify-between bg-black border border-zinc-800 rounded px-2 py-1 font-mono text-[11px] text-zinc-300">
+            <div className="mb-3 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-700">
+              <span className="font-bold block mb-1 text-slate-900">⚠️ 投稿前の確認</span>
+              Play Consoleのテスター欄に下記グループアドレスを追加してください：
+              <div className="mt-1 flex items-center justify-between bg-white border border-slate-200 rounded px-2 py-1 text-[11px] text-emerald-800 font-mono">
                 <span>{GOOGLE_GROUP_EMAIL}</span>
                 <button
                   type="button"
                   onClick={() => {
-                    playMinimalClick('click');
+                    playHapticSound('click');
                     navigator.clipboard.writeText(GOOGLE_GROUP_EMAIL);
-                    alert('アドレスをコピーしました。');
+                    alert('グループアドレスをコピーしました！Consoleに貼り付けてください。');
                   }}
-                  className="text-emerald-400 hover:underline ml-2"
+                  className="text-emerald-600 font-bold hover:underline ml-2"
                 >
-                  COPY
+                  コピー
                 </button>
               </div>
             </div>
 
             {formError && (
-              <div className="mb-3 p-2 bg-red-950/60 border border-red-800 text-red-300 rounded text-xs">
+              <div className="mb-3 p-2 bg-red-50 border border-red-200 text-red-600 rounded text-xs">
                 {formError}
               </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block text-zinc-400 font-mono mb-1">APP_NAME *</label>
+                <label className="block font-semibold text-slate-700 mb-1">アプリ名 *</label>
                 <input
                   type="text"
                   required
-                  placeholder="HabitTracker"
+                  placeholder="例: 習慣トラッカー"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-zinc-400 font-mono mb-1">CATEGORY</label>
+                  <label className="block font-semibold text-slate-700 mb-1">カテゴリ</label>
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 bg-white"
                   >
                     <option value="ツール">ツール</option>
                     <option value="ゲーム">ゲーム</option>
@@ -1421,85 +1452,85 @@ export default function Home() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-zinc-400 font-mono mb-1">DEVELOPER</label>
+                  <label className="block font-semibold text-slate-700 mb-1">開発者名</label>
                   <input
                     type="text"
                     disabled
                     value={username || '開発者'}
-                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-500 cursor-not-allowed"
+                    className="w-full px-3 py-2 border border-slate-200 bg-slate-100 text-slate-500 rounded-lg cursor-not-allowed"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-zinc-400 font-mono mb-1">WEB_TEST_URL *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Web参加用リンク (Play Console発行URL) *</label>
                 <input
                   type="url"
                   required
                   placeholder="https://play.google.com/apps/testing/..."
                   value={testUrl}
                   onChange={(e) => setTestUrl(e.target.value)}
-                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
                 />
               </div>
 
               <div>
-                <label className="block text-zinc-400 font-mono mb-1">TAGS (カンマ区切り)</label>
+                <label className="block font-semibold text-slate-700 mb-1">タグ（カンマ区切り）</label>
                 <input
                   type="text"
-                  placeholder="Android14, 審査直結"
+                  placeholder="例: Android14, 日常系"
                   value={tagsInput}
                   onChange={(e) => setTagsInput(e.target.value)}
-                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={isSubmitting || userPoints < REQUIRED_POINTS_FOR_POST}
-                className="w-full py-2.5 bg-emerald-400 hover:bg-emerald-300 text-black font-mono font-bold rounded-lg transition disabled:opacity-40"
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition disabled:opacity-40"
               >
-                {isSubmitting ? 'DEPLOYING...' : 'CONFIRM_POST (1,500 pt)'}
+                {isSubmitting ? '登録中...' : '1,500 pt で募集する'}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* 設計思想・利用規約モーダル */}
+      {/* サービス概要・マニュアル・利用規約モーダル */}
       {activeManualModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#0e1017] border border-zinc-800 w-full max-w-md rounded-2xl p-5 shadow-2xl max-h-[85vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-3 pb-2 border-b border-zinc-800">
-              <h3 className="font-bold text-white text-base font-mono">
-                {activeManualModal === 'about' && 'PHILOSOPHY // 設計思想'}
-                {activeManualModal === 'dev' && 'PLAY_CONSOLE_GUIDE // 審査手順'}
-                {activeManualModal === 'terms' && 'TERMS // 利用規約'}
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl p-5 shadow-xl max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-base">
+                {activeManualModal === 'about' && 'テスターズフィールドの設計思想'}
+                {activeManualModal === 'dev' && '審査申請手順（Play Console連携）'}
+                {activeManualModal === 'terms' && '利用規約 / 免責事項'}
               </h3>
-              <button onClick={() => { playMinimalClick('click'); setActiveManualModal(null); }} className="text-zinc-400 hover:text-white">
+              <button onClick={() => { playHapticSound('click'); setActiveManualModal(null); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {activeManualModal === 'about' && (
-              <div className="space-y-3 text-xs text-zinc-400 leading-relaxed font-sans">
-                <p><strong className="text-white">審査官を納得させる「証拠」を自動でつくる：</strong><br />Google Playの審査では「テスターを集めたか」ではなく「フィードバックを得て修正したか」が問われます。テスポは20文字以上の義務付けと、Play Console用のコピペ用レポート生成に特化しています。</p>
-                <p><strong className="text-white">相互テストの煩わしさをゼロに：</strong><br />「返報性のプレッシャー」やDMでの個別対応を廃止。共通ポイントプールで自律的に回る仕組みです。</p>
+              <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
+                <p><strong className="text-slate-900">審査官を納得させる「証拠」を自動生成：</strong><br />Google Playの審査では「テスターを集めたか」だけでなく「フィードバックを得て修正したか」が厳しく問われます。テスポは20文字以上の具体的な意見を必須にし、Play Consoleにそのまま貼れるレポートをワンタップで作成します。</p>
+                <p><strong className="text-slate-900">相互テストの煩わしさをゼロに：</strong><br />「お返しのプレッシャー」やDMでの個別対応を廃止。共通ポイントプールで自律的に助け合う仕組みです。</p>
               </div>
             )}
 
             {activeManualModal === 'dev' && (
-              <div className="space-y-2 text-xs text-zinc-400 leading-relaxed font-mono">
-                <p>1. Play Console &gt; クローズドテスト &gt; テスターに <span className="text-emerald-400">{GOOGLE_GROUP_EMAIL}</span> を追加</p>
+              <div className="space-y-2 text-xs text-slate-600 leading-relaxed">
+                <p>1. Play Console &gt; クローズドテスト &gt; テスターに <span className="font-mono text-emerald-700 font-bold">{GOOGLE_GROUP_EMAIL}</span> を追加</p>
                 <p>2. Webテスター参加リンクを取得してテスポに投稿</p>
-                <p>3. 14日経過後、「COPY_EVIDENCE」ボタンでレポートを生成して申請フォームに貼る</p>
+                <p>3. 14日経過後、「審査申請用フィードバックをコピー」ボタンでエビデンスを生成し、Consoleの申請フォームに貼り付けて本番公開を申請</p>
               </div>
             )}
 
             {activeManualModal === 'terms' && (
-              <div className="space-y-2 text-xs text-zinc-400 leading-relaxed">
-                <p>・即時アンインストールやテスト放置、サボり行為はアカウント停止およびポイント没収の対象です。</p>
-                <p>・当サービスはGoogle LLCとの提携関係にはありません。審査結果について保証するものではありません。</p>
+              <div className="space-y-2 text-xs text-slate-600 leading-relaxed">
+                <p>・即時アンインストールやテスト放置、サボり行為はアカウント停止およびポイント没収の対象となります。</p>
+                <p>・当サービスはGoogle LLCとの提携関係にはありません。審査通過を保証するものではありません。</p>
               </div>
             )}
           </div>
