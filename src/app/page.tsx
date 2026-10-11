@@ -804,7 +804,7 @@ export default function Home() {
                   >
                     <div>
                       <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded">便利</span>
-                      <h4 className="text-xs font-bold text-slate-900 mt-1 group-hover:text-emerald-700">他社ツール（TestCrew等）との併用</h4>
+                      <h4 className="text-xs font-bold text-slate-900 mt-1 group-hover:text-emerald-700">他社ツール（XやDiscord等）との併用</h4>
                       <p className="text-[11px] text-slate-500 mt-0.5">複数グループ登録で人数を倍増</p>
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition" />
@@ -874,7 +874,7 @@ export default function Home() {
               <div className="border border-purple-200 bg-purple-50/30 rounded-xl p-3.5 space-y-1.5">
                 <div className="flex items-center gap-1.5 font-bold text-xs text-purple-900">
                   <Layers className="w-4 h-4 text-purple-600" />
-                  <span>3. 他社ツール（TestCrewやDiscord）との完全併用OK</span>
+                  <span>3. 他社ツール（XやDiscord）との完全併用OK</span>
                 </div>
                 <p className="text-[11px] text-slate-600 leading-relaxed">
                   乗り換える必要はありません。Google Play Consoleは複数のGoogleグループを同時に登録できます。他社ツールで集めている人の**「人数のバックアップ＆証拠レポート作成用の併用先」**として最も威力を発揮します。
@@ -1031,7 +1031,7 @@ export default function Home() {
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-bold">3</span>
-                <span>他社ツール（TestCrew・Discord）との併用</span>
+                <span>他社ツール（X・Discord）との併用</span>
               </h2>
 
               <div className="space-y-3 text-xs text-slate-700">
